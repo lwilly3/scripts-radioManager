@@ -47,6 +47,7 @@ Le script API-setup_server.sh configure l’API et le serveur Icecast.
 
 Étapes :
 Téléchargez le script :
+
     wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/API-setup_server.sh -O setup_server.sh
 
 
