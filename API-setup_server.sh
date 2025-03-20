@@ -225,16 +225,18 @@ check_error "Configuration d'Alembic"
 
 # 7. Lancement de l'API avec Uvicorn et Gunicorn
 # - Installe Gunicorn, un serveur WSGI pour exécuter l'API en production.
-echo "Installation de Gunicorn..."
+# - Installe uvloop pour améliorer les performances des tâches asynchrones avec Uvicorn.
+# - Installe httptools pour optimiser le parsing des requêtes HTTP.
+echo "Installation de Gunicorn, uvloop et httptools..."
 su - audace -c "
 cd $APP_DIR/src
 source $VENV_DIR/bin/activate
-pip install gunicorn
+pip install gunicorn uvloop httptools
 "
-check_error "Installation de Gunicorn"
+check_error "Installation de Gunicorn, uvloop et httptools"
 
 # 8. Création et gestion d'un service systemd
-# - Crée un fichier de service systemd pour lancer l'API automatiquement au démarrage.
+# - Crée un fichier de service systemd pour lancer by l'API automatiquement au démarrage.
 # - Utilise Gunicorn avec 2 workers pour gérer les requêtes.
 echo "Création du service systemd pour l'API..."
 cat <<EOF > /etc/systemd/system/api.service
