@@ -47,194 +47,115 @@ Le script API-setup_server.sh configure l’API et le serveur Icecast.
 
 Étapes :
 Téléchargez le script :
-bash
+    wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/API-setup_server.sh -O setup_server.sh
 
-Collapse
 
-Wrap
-
-Copy
-wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/API-setup_server.sh -O setup_server.sh
 Rendez-le exécutable :
-bash
 
-Collapse
+    chmod +x setup_server.sh
 
-Wrap
-
-Copy
-chmod +x setup_server.sh
 Éditez les variables dans le script (au début du fichier) :
 AUDACE_PASSWORD : Mot de passe pour l’utilisateur audace (optionnel, une invite apparaîtra si vide).
 DB_PASSWORD : Mot de passe pour PostgreSQL.
 ADMIN_EMAIL : Votre email pour Certbot.
+
+
 Exécutez le script :
-bash
 
-Collapse
+    sudo bash setup_server.sh
 
-Wrap
-
-Copy
-sudo bash setup_server.sh
 Vérifiez les services :
-bash
 
-Collapse
+    systemctl status icecast2
+    systemctl status nginx
+    systemctl status api
 
-Wrap
-
-Copy
-systemctl status icecast2
-systemctl status nginx
-systemctl status api
 Résultat attendu :
 Icecast disponible sur https://radio.audace.ovh/stream.mp3.
 API accessible sur https://api.radio.audace.ovh.
+
 2. Configuration du frontend
 Le script init-radioManager-frontend-server.sh configure le frontend basé sur Vite.
 
 Étapes :
+
 Téléchargez le script :
-bash
 
-Collapse
+    wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/init-radioManager-frontend-server.sh -O init_frontend.sh
 
-Wrap
-
-Copy
-wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/init-radioManager-frontend-server.sh -O init_frontend.sh
 Rendez-le exécutable :
-bash
 
-Collapse
+    chmod +x init_frontend.sh
 
-Wrap
-
-Copy
-chmod +x init_frontend.sh
 Éditez les variables si nécessaire (ex. DOMAIN, EMAIL).
+
+
 Exécutez le script :
-bash
 
-Collapse
+    sudo bash init_frontend.sh
 
-Wrap
-
-Copy
-sudo bash init_frontend.sh
 Vérifiez le site :
 Ouvrez https://app.radioaudace.com dans un navigateur.
+
 3. Mise à jour du frontend
 Le script update_frontend.sh met à jour le frontend existant.
 
 Étapes :
 Téléchargez le script :
-bash
+    wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/update_frontend.sh -O update_frontend.sh
 
-Collapse
-
-Wrap
-
-Copy
-wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/update_frontend.sh -O update_frontend.sh
 Rendez-le exécutable :
-bash
 
-Collapse
+    chmod +x update_frontend.sh
 
-Wrap
-
-Copy
-chmod +x update_frontend.sh
 Exécutez le script :
-bash
 
-Collapse
+    sudo bash update_frontend.sh
 
-Wrap
-
-Copy
-sudo bash update_frontend.sh
 Consultez les logs si nécessaire :
-bash
 
-Collapse
+    cat /var/log/update_frontend.log
 
-Wrap
-
-Copy
-cat /var/log/update_frontend.log
 4. Démarrage automatique du frontend
 Le script acript-autoStart-radioManager.sh s’exécute au démarrage pour garantir que le frontend est actif.
 
 Étapes :
 Téléchargez le script :
-bash
 
-Collapse
+    wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/acript-autoStart-radioManager.sh -O /usr/local/bin/start-radioaudace.sh
 
-Wrap
-
-Copy
-wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/acript-autoStart-radioManager.sh -O /usr/local/bin/start-radioaudace.sh
 Rendez-le exécutable :
-bash
 
-Collapse
+    chmod +x /usr/local/bin/start-radioaudace.sh
 
-Wrap
-
-Copy
-chmod +x /usr/local/bin/start-radioaudace.sh
 Créez un service systemd :
-bash
 
-Collapse
+    sudo nano /etc/systemd/system/start-radioaudace.service
 
-Wrap
-
-Copy
-sudo nano /etc/systemd/system/start-radioaudace.service
 Ajoutez ce contenu :
-ini
 
-Collapse
+    [Unit]
+    Description=Démarre le site radioaudace après un reboot
+    After=network.target
 
-Wrap
+    [Service]
+    ExecStart=/usr/local/bin/start-radioaudace.sh
+    Type=oneshot
+    RemainAfterExit=yes
+    User=root
 
-Copy
-[Unit]
-Description=Démarre le site radioaudace après un reboot
-After=network.target
+    [Install]
+    WantedBy=multi-user.target
 
-[Service]
-ExecStart=/usr/local/bin/start-radioaudace.sh
-Type=oneshot
-RemainAfterExit=yes
-User=root
-
-[Install]
-WantedBy=multi-user.target
 Activez le service :
-bash
 
-Collapse
+    sudo systemctl enable start-radioaudace.service
+    sudo systemctl start start-radioaudace.service
 
-Wrap
-
-Copy
-sudo systemctl enable start-radioaudace.service
-sudo systemctl start start-radioaudace.service
 Vérifiez les logs après un redémarrage :
-bash
 
-Collapse
+    cat /var/log/start_radioaudace.log
 
-Wrap
-
-Copy
-cat /var/log/start_radioaudace.log
 Configuration Icecast
 Le fichier config-audaceStream-IceCast.xml est utilisé par API-setup_server.sh pour configurer Icecast. Il définit :
 
