@@ -102,6 +102,7 @@ Le script update_frontend.sh met à jour le frontend existant.
 
 Étapes :
 Téléchargez le script :
+
     wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/update_frontend.sh -O update_frontend.sh
 
 Rendez-le exécutable :
@@ -156,20 +157,29 @@ Vérifiez les logs après un redémarrage :
 
     cat /var/log/start_radioaudace.log
 
+
 Configuration Icecast
 Le fichier config-audaceStream-IceCast.xml est utilisé par API-setup_server.sh pour configurer Icecast. Il définit :
 
-Un point de montage /stream.mp3 avec un bitrate de 32 kbps.
-Une limite de 200 auditeurs.
-Des mots de passe par défaut (D3faultpass) pour les sources, relais et admin (à modifier pour la sécurité).
+- Un point de montage /stream.mp3 avec un bitrate de 32 kbps.
+- Une limite de 200 auditeurs.
+- Des mots de passe par défaut (D3faultpass) pour les sources, relais et admin (à modifier pour la sécurité).
+
 Pour personnaliser davantage, éditez ce fichier avant d’exécuter le script.
 
+
 Dépannage
+
 Logs Nginx : sudo tail -f /var/log/nginx/error.log
+
 Logs Icecast : sudo tail -f /var/log/icecast2/error.log
+
 Logs API : sudo journalctl -u api
+
 Logs Frontend : cat /var/log/update_frontend.log ou cat /var/log/start_radioaudace.log
+
 Si Certbot échoue, vérifiez que vos domaines pointent correctement vers l’IP du serveur via les enregistrements DNS.
+
 
 Contributions
 Les contributions sont les bienvenues ! Si vous souhaitez améliorer ces scripts :
