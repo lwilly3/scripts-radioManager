@@ -34,6 +34,7 @@ Ce fichier ! Fournit une vue d’ensemble et des instructions pour utiliser les 
                                         Prérequis
 
 //////////////////////////////////////////////////////////////////////////////////////////
+
 Pour utiliser ces scripts, vous devez disposer de :
 
 Un serveur Ubuntu 24.10 fraîchement installé.
