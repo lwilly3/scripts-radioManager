@@ -1,0 +1,195 @@
+# ===============================
+#     CONFIGURATION WIREGUARD
+# ===============================
+
+/interface wireguard
+add name=wg-vpn listen-port=51820 mtu=1420 \
+    private-key=""
+
+/interface wireguard peers
+add interface=wg-vpn public-key="" \
+    preshared-key="" \
+    endpoint-address=mon.domaine.com endpoint-port=51820 \
+    allowed-address=10.8.0.0/24,192.168.1.0/24,192.168.20.0/24 \
+    persistent-keepalive=25
+
+/ip address
+add address=10.8.0.254/24 interface=wg-vpn network=10.8.0.0
+
+
+# ===============================
+#           DNS
+# ===============================
+
+/ip dns
+set allow-remote-requests=yes servers=1.1.1.1
+
+
+# ===============================
+#            ROUTES
+# ===============================
+
+/ip route
+add dst-address=10.8.0.0/24 gateway=wg-vpn comment="Réseau VPN"
+add dst-address=192.168.1.0/24 gateway=wg-vpn comment="LAN principal via WG"
+add dst-address=192.168.20.0/24 gateway=wg-vpn comment="LAN streaming via WG"
+
+
+# ===============================
+#      FIREWALL (ESSENTIEL)
+# ===============================
+
+/ip firewall filter
+add chain=input action=accept in-interface=wg-vpn comment="WG: autoriser entrée"
+add chain=forward action=accept in-interface=wg-vpn comment="WG -> LAN"
+add chain=forward action=accept out-interface=wg-vpn comment="LAN -> WG"
+add chain=input action=accept protocol=icmp comment="Ping OK"
+
+
+# ===============================
+#               NAT
+# ===============================
+
+/ip firewall nat
+add chain=srcnat action=masquerade out-interface=wg-vpn comment="Masquerade vers VPN"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+; # Configuration WireGuard Client pour MikroTik - CORRIGÉE
+; # Cette configuration permet aux autres clients VPN d'accéder à vos réseaux locaux
+
+; /interface wireguard
+; add listen-port=51820 mtu=1420 name=wg-vpn private-key="="
+
+; /interface wireguard peers
+; add allowed-address=10.8.0.0/24,192.168.1.0/24,192.168.20.0/24 endpoint-address=vps.monassurance.net \
+;     endpoint-port=51820 interface=wg-vpn preshared-key="=" \
+;     public-key=""
+
+; /ip address
+; add address=10.8.0.254/24 interface=wg-vpn network=10.8.0.0
+
+; # IPv6 (optionnel)
+; #add address=fdcc:ad94:bacf:61a4::cafe:5/112 interface=wg-vpn network=fdcc:ad94:bacf:61a4::/112
+
+; # Configuration DNS
+; /ip dns
+; set allow-remote-requests=yes servers=199.85.126.30,199.85.127.30
+
+; # ===== ROUTES CRITIQUES =====
+; # Les clients VPN doivent savoir que les réseaux locaux passent par le MikroTik
+; /ip route
+; add dst-address=10.8.0.0/24 gateway=wg-vpn comment="Route vers réseau VPN" disabled=no
+; add dst-address=192.168.1.0/24 gateway=wg-vpn comment="Route LAN local via VPN" disabled=no
+; add dst-address=192.168.20.0/24 gateway=wg-vpn comment="Route Stream via VPN" disabled=no
+
+; # ===== FIREWALL - RÈGLES ESSENTIELLES =====
+; # Accepter le trafic WireGuard entrant
+; /ip firewall filter
+; add action=accept chain=input in-interface=wg-vpn comment="WG: Accepter input"
+; add action=accept chain=input protocol=icmp comment="WG: Accepter ICMP"
+
+; # Forward: Autoriser trafic bidirectionnel entre VPN et LANs
+; add action=accept chain=forward in-interface=wg-vpn out-interface=bridgeLAN comment="WG->LAN: Forward"
+; add action=accept chain=forward in-interface=wg-vpn out-interface=StreamBridge comment="WG->Stream: Forward"
+; add action=accept chain=forward in-interface=bridgeLAN src-address=192.168.1.0/24 out-interface=wg-vpn comment="LAN->WG: Forward"
+; add action=accept chain=forward in-interface=StreamBridge src-address=192.168.20.0/24 out-interface=wg-vpn comment="Stream->WG: Forward"
+
+; # ===== NAT/MASQUERADE =====
+; # Le MikroTik doit se présenter comme source pour les réponses
+; /ip firewall nat
+; add action=masquerade chain=srcnat out-interface=wg-vpn src-address=192.168.1.0/24 comment="LAN->WG masquerade"
+; add action=masquerade chain=srcnat out-interface=wg-vpn src-address=192.168.20.0/24 comment="Stream->WG masquerade"
+
+; # Pour les réponses du MikroTik lui-même
+; add action=masquerade chain=srcnat out-interface=wg-vpn comment="MikroTik->WG masquerade"
+
+; # ===== COMMANDES DE VÉRIFICATION =====
+; # Exécutez ces commandes pour déboguer:
+; # /interface wireguard print
+; # /interface wireguard peers print
+; # /ip route print
+; # /ip firewall nat print
+; # /ip firewall filter print where chain=forward
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+; # Configuration WireGuard Client pour MikroTik
+; # Cette configuration permet aux autres clients VPN d'accéder à vos réseaux locaux
+
+; /interface wireguard
+; add listen-port=51820 mtu=1420 name=wg-vpn private-key="="
+
+; /interface wireguard peers
+; add allowed-address=10.8.0.0/24,192.168.1.0/24,192.168.20.0/24 endpoint-address=vps.monassurance.net \
+;     endpoint-port=51820 interface=wg-vpn preshared-key="=" \
+;     public-key=""
+
+; /ip address
+; add address=10.8.0.254/24 interface=wg-vpn network=10.8.0.0
+
+; # IPv6 (optionnel mais recommandé)
+; add address=fdcc:ad94:bacf:61a4::cafe:5/112 interface=wg-vpn network=fdcc:ad94:bacf:61a4::/112
+
+; # Configuration DNS
+; /ip dns
+; set allow-remote-requests=yes servers=199.85.126.30,199.85.127.30
+
+; # Routes pour accéder aux ressources via le VPN
+; /ip route
+; add dst-address=10.8.0.0/24 gateway=wg-vpn routing-table=main
+
+; # Firewall - Autoriser le trafic via WireGuard
+; /ip firewall filter
+; add action=accept chain=input in-interface=wg-vpn comment="Accepter trafic entrant WireGuard"
+; add action=accept chain=forward in-interface=wg-vpn comment="Accepter forward depuis WireGuard vers LAN"
+; add action=accept chain=forward out-interface=wg-vpn comment="Accepter forward vers WireGuard depuis LAN"
+
+; # NAT - Masquerader pour WireGuard
+; /ip firewall nat
+; add action=masquerade chain=srcnat out-interface=wg-vpn src-address=192.168.1.0/24 comment="Masquerade LAN vers WG"
+; add action=masquerade chain=srcnat out-interface=wg-vpn src-address=192.168.20.0/24 comment="Masquerade Stream vers WG"
+
+; # Vérifier la connexion
+; # /interface wireguard print
+; # /interface wireguard peers print

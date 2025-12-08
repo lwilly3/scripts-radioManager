@@ -1,196 +1,357 @@
 # scripts-radioManager
-####################################################################################################
-  
-                          Scripts pour radioManager
 
-####################################################################################################
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/lwilly3/scripts-radioManager/graphs/commit-activity)
+
+> **Collection de scripts d'automatisation pour déploiement et gestion d'infrastructures**
+
+Bienvenue dans le dépôt **scripts-radioManager** ! Ce repository contient une collection de scripts d'automatisation pour différents projets : déploiement d'API, streaming audio, automatisation de workflows, et solutions VPN. Chaque script est accompagné d'une documentation complète pour faciliter la prise en main.
+
+## 📋 Table des matières
+
+- [Vue d'ensemble](#-vue-densemble)
+- [Structure du repository](#-structure-du-repository)
+- [Projets disponibles](#-projets-disponibles)
+  - [API Audace](#1-api-audace---streaming--api)
+  - [RadioManager Frontend](#2-radiomanager---frontend-vite)
+  - [N8N Automation](#3-n8n---automatisation-de-workflows)
+  - [VPN WireGuard](#4-vpn-wireguard)
+- [Documentation](#-documentation)
+- [Prérequis généraux](#-prérequis-généraux)
+- [Guide de contribution](#-guide-de-contribution)
+- [Dépannage](#-dépannage-général)
+- [Support](#-support)
+
+## 🎯 Vue d'ensemble
+
+Ce repository regroupe des scripts pour :
+- **Déploiement d'API** : FastAPI + PostgreSQL + Icecast
+- **Frontend moderne** : Vite + Node.js + Nginx
+- **Automatisation** : N8N sur EC2 Amazon Linux
+- **Solutions VPN** : WireGuard pour serveur, routeur MikroTik et clients Windows
+
+**Systèmes supportés** : Ubuntu 24.10, Amazon Linux 2/2023, Windows 10/11, MikroTik RouterOS 7.x
+
+## 📁 Structure du repository
+
+```
+scripts-radioManager/
+├── README.md                        # Ce fichier
+├── AGENT.md                         # Guide pour agents IA et contributeurs
+│
+├── API audace/                      # 🎵 Streaming audio + API
+│   ├── API-setup_server.sh
+│   ├── API-setup_server.md
+│   ├── config-audaceStream-IceCast.xml
+│   └── config-audaceStream-IceCast.md
+│
+├── radioManager/                    # 🌐 Frontend Vite
+│   ├── init-radioManager-frontend-server.sh
+│   ├── init-radioManager-frontend-server.md
+│   ├── acript-autoStart-radioManager.sh
+│   ├── acript-autoStart-radioManager.md
+│   ├── update_frontend.sh
+│   └── update_frontend.md
+│
+├── N8N/                            # 🔄 Automatisation workflows
+│   ├── Script_installation_N8N_sur_EC2_AmazonLinux.sh
+│   ├── Script_installation_N8N_sur_EC2_AmazonLinux.md
+│   ├── Script_MAJ_N8N.sh
+│   └── Script_MAJ_N8N.md
+│
+└── VPN wireguard/                  # 🔒 Solutions VPN
+    ├── serveur VPN/
+    │   ├── install-wg-easy-nginx.sh
+    │   └── install-wg-easy-nginx.md
+    ├── Routeur Mikrotik/
+    │   ├── script-wiregard-client-ikrotik
+    │   └── script-wireguard-client-mikrotik.md
+    └── script utilisateur domaine AD/
+        ├── README.md
+        ├── Solution-Service-HTTP.ps1
+        └── Solution-Service-HTTP.md
+```
+
+## 🚀 Projets disponibles
+
+### 1. API Audace - Streaming + API
+
+**Description** : Déploiement complet d'une infrastructure backend avec API FastAPI, streaming Icecast et base PostgreSQL.
+
+**Composants** :
+- FastAPI (API REST)
+- PostgreSQL (base de données)
+- Icecast2 (streaming audio)
+- Nginx (reverse proxy)
+- SSL Let's Encrypt
 
-Bienvenue dans le dépôt scripts-radioManager ! Ce dépôt contient des scripts Bash utilisés pour configurer, déployer et gérer les composants backend et frontend de l’application radioManager, une solution de streaming audio et de gestion d’API. Ces scripts automatisent l’installation et la maintenance d’un serveur Ubuntu 24.10 hébergeant une API, un serveur Icecast, et un frontend basé sur Vite.
+**Documentation** : [`API audace/API-setup_server.md`](API%20audace/API-setup_server.md)
 
-Contenu du dépôt
-Voici une liste des fichiers présents dans ce dépôt avec une brève description :
+**Quick Start** :
+```bash
+wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/API%20audace/API-setup_server.sh
+chmod +x API-setup_server.sh
+sudo bash API-setup_server.sh
+```
 
-# API-setup_server.sh
-Configure un serveur Ubuntu 24.10 pour héberger une API (via FastAPI) et un flux Icecast. Installe les dépendances, configure Nginx, PostgreSQL, un environnement virtuel Python, et sécurise le tout avec un pare-feu et des certificats SSL.
+**Résultat** :
+- Icecast : `https://radio.audace.ovh/stream.mp3`
+- API : `https://api.radio.audace.ovh`
 
-# acript-autoStart-radioManager.sh
-Script exécuté au démarrage du serveur pour s’assurer que le frontend (app.radioaudace.com) est actif. Vérifie Nginx, construit le frontend si nécessaire, et met à jour le code depuis Git (optionnel).
+---
 
-# config-audaceStream-IceCast.xml
-Fichier de configuration personnalisé pour Icecast, définissant un point de montage /stream.mp3 avec un bitrate de 32 kbps, accessible publiquement.
+### 2. RadioManager - Frontend Vite
 
-# init-radioManager-frontend-server.sh
-Configure un serveur Ubuntu 24.10 pour héberger un site frontend basé sur Vite. Installe Node.js, clone le dépôt Git du frontend, construit le projet, et configure Nginx avec SSL.
+**Description** : Configuration de serveurs pour héberger des applications frontend modernes basées sur Vite.
 
-# update_frontend.sh
-Met à jour le frontend en récupérant les dernières modifications du dépôt Git, recompilant avec Vite, et redémarrant Nginx.
+**Scripts disponibles** :
+- **Installation initiale** : Configure Nginx, Node.js, SSL
+- **Démarrage automatique** : Service systemd pour haute disponibilité
+- **Mise à jour** : Déploiement depuis Git avec compilation
 
-# README.md
-Ce fichier ! Fournit une vue d’ensemble et des instructions pour utiliser les scripts.
+**Documentation** :
+- Installation : [`radioManager/init-radioManager-frontend-server.md`](radioManager/init-radioManager-frontend-server.md)
+- Auto-start : [`radioManager/acript-autoStart-radioManager.md`](radioManager/acript-autoStart-radioManager.md)
+- Mise à jour : [`radioManager/update_frontend.md`](radioManager/update_frontend.md)
 
+**Quick Start** :
+```bash
+wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/radioManager/init-radioManager-frontend-server.sh
+chmod +x init-radioManager-frontend-server.sh
+sudo bash init-radioManager-frontend-server.sh
+```
 
-/////////////////////////////////////////////////////////////////////////////////////////
+**Résultat** : Site accessible sur `https://app.radioaudace.com`
 
-                                        Prérequis
+---
 
-//////////////////////////////////////////////////////////////////////////////////////////
+### 3. N8N - Automatisation de workflows
 
-Pour utiliser ces scripts, vous devez disposer de :
+**Description** : Installation et maintenance de N8N (alternative open-source à Zapier) sur instances EC2 Amazon Linux.
 
-Un serveur Ubuntu 24.10 fraîchement installé.
-Un accès root ou des privilèges sudo.
-Une connexion Internet pour télécharger les dépendances et les fichiers depuis GitHub.
-Des noms de domaine configurés (ex. radio.audace.ovh, api.radio.audace.ovh, app.radioaudace.com) pointant vers l’IP de votre serveur pour les certificats SSL via Certbot.
-Installation et utilisation
+**Fonctionnalités** :
+- Installation complète avec Docker ou npm
+- Configuration Nginx + SSL
+- Script de mise à jour avec sauvegarde
+- Intégration avec plus de 400 services
 
-1. Configuration du backend (API et Icecast)
-Le script API-setup_server.sh configure l’API et le serveur Icecast.
+**Documentation** :
+- Installation : [`N8N/Script_installation_N8N_sur_EC2_AmazonLinux.md`](N8N/Script_installation_N8N_sur_EC2_AmazonLinux.md)
+- Mise à jour : [`N8N/Script_MAJ_N8N.md`](N8N/Script_MAJ_N8N.md)
 
-Étapes :
-Téléchargez le script :
+**Quick Start** :
+```bash
+wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/N8N/Script_installation_N8N_sur_EC2_AmazonLinux.sh
+chmod +x Script_installation_N8N_sur_EC2_AmazonLinux.sh
+sudo bash Script_installation_N8N_sur_EC2_AmazonLinux.sh
+```
 
-    wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/API-setup_server.sh -O setup_server.sh
+**Résultat** : Interface N8N accessible sur `https://n8n.votre-domaine.com`
 
+---
 
-Rendez-le exécutable :
+### 4. VPN WireGuard
 
-    chmod +x setup_server.sh
+**Description** : Solutions VPN WireGuard pour différents cas d'usage.
 
-Éditez les variables dans le script (au début du fichier) :
-AUDACE_PASSWORD : Mot de passe pour l’utilisateur audace (optionnel, une invite apparaîtra si vide).
-DB_PASSWORD : Mot de passe pour PostgreSQL.
-ADMIN_EMAIL : Votre email pour Certbot.
+#### 4.1 Serveur VPN (WG-Easy)
 
+Installation d'un serveur VPN avec interface web de gestion.
 
-Exécutez le script :
+**Documentation** : [`VPN wireguard/serveur VPN/install-wg-easy-nginx.md`](VPN%20wireguard/serveur%20VPN/install-wg-easy-nginx.md)
 
-    sudo bash setup_server.sh
+```bash
+wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/VPN%20wireguard/serveur%20VPN/install-wg-easy-nginx.sh
+chmod +x install-wg-easy-nginx.sh
+sudo bash install-wg-easy-nginx.sh
+```
 
-Vérifiez les services :
+**Résultat** : Interface WG-Easy sur `https://vps.monassurance.net`
 
-    systemctl status icecast2
-    systemctl status nginx
-    systemctl status api
+#### 4.2 Client MikroTik
 
-Résultat attendu :
-Icecast disponible sur https://radio.audace.ovh/stream.mp3.
-API accessible sur https://api.radio.audace.ovh.
+Configuration d'un routeur MikroTik en client VPN WireGuard.
 
-2. Configuration du frontend
-Le script init-radioManager-frontend-server.sh configure le frontend basé sur Vite.
+**Documentation** : [`VPN wireguard/Routeur Mikrotik/script-wireguard-client-mikrotik.md`](VPN%20wireguard/Routeur%20Mikrotik/script-wireguard-client-mikrotik.md)
 
-Étapes :
+**Utilisation** : Copier-coller les commandes dans le terminal RouterOS via Winbox ou SSH.
 
-Téléchargez le script :
+#### 4.3 Client Windows (sans droits admin)
 
-    wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/init-radioManager-frontend-server.sh -O init_frontend.sh
+Solution pour utilisateurs de domaine Active Directory sans privilèges administrateur.
 
-Rendez-le exécutable :
+**Documentation** : 
+- [`VPN wireguard/script utilisateur domaine AD/README.md`](VPN%20wireguard/script%20utilisateur%20domaine%20AD/README.md)
+- [`VPN wireguard/script utilisateur domaine AD/Solution-Service-HTTP.md`](VPN%20wireguard/script%20utilisateur%20domaine%20AD/Solution-Service-HTTP.md)
 
-    chmod +x init_frontend.sh
+```powershell
+# Exécuter en tant qu'Administrateur (une seule fois)
+powershell.exe -ExecutionPolicy Bypass -File "Solution-Service-HTTP.ps1"
+```
 
-Éditez les variables si nécessaire (ex. DOMAIN, EMAIL).
+**Résultat** : Fichiers BAT permettant aux utilisateurs d'activer/désactiver le VPN sans droits admin.
 
+---
 
-Exécutez le script :
+## 📖 Documentation
 
-    sudo bash init_frontend.sh
+Chaque script dispose d'une documentation complète au format Markdown (`.md`) détaillant :
+- 📋 Vue d'ensemble et objectifs
+- 📦 Prérequis système
+- ⚙️ Variables de configuration
+- 🚀 Instructions d'installation pas à pas
+- 🔍 Vérifications post-installation
+- 🛠️ Maintenance et mises à jour
+- ⚠️ Dépannage complet
+- 📚 Ressources et liens utiles
 
-Vérifiez le site :
-Ouvrez https://app.radioaudace.com dans un navigateur.
+**⚠️ Consultez toujours le fichier `.md` associé à chaque script avant utilisation.**
 
-3. Mise à jour du frontend
-Le script update_frontend.sh met à jour le frontend existant.
+## 🔧 Prérequis généraux
 
-Étapes :
-Téléchargez le script :
+### Pour les scripts Ubuntu/Debian
+- ✅ Serveur Ubuntu 24.10 (ou Debian récent)
+- ✅ Accès root ou privilèges sudo
+- ✅ Connexion Internet stable
+- ✅ Nom(s) de domaine pointant vers l'IP du serveur (pour SSL)
 
-    wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/update_frontend.sh -O update_frontend.sh
+### Pour les scripts Amazon Linux
+- ✅ Instance EC2 avec Amazon Linux 2 ou 2023
+- ✅ Security Groups configurés (ports 22, 80, 443)
+- ✅ Accès SSH avec clé
 
-Rendez-le exécutable :
+### Pour les scripts Windows
+- ✅ Windows 10/11 ou Windows Server
+- ✅ PowerShell 5.1+
+- ✅ Droits administrateur (installation uniquement)
 
-    chmod +x update_frontend.sh
+### Pour la configuration MikroTik
+- ✅ Routeur avec RouterOS 7.x ou supérieur
+- ✅ Accès Winbox, WebFig ou SSH
+- ✅ Clés WireGuard générées depuis le serveur
 
-Exécutez le script :
+## 🎓 Guide de contribution
 
-    sudo bash update_frontend.sh
+### Pour les contributeurs
 
-Consultez les logs si nécessaire :
+Avant de contribuer, consultez le fichier **[AGENT.md](AGENT.md)** qui contient :
+- 📐 Standards de documentation obligatoires
+- 🎨 Templates de code (Bash, PowerShell)
+- 🔒 Bonnes pratiques de sécurité
+- 📊 Métriques de qualité (score minimal : 7/10)
+- ✅ Checklist de validation complète
 
-    cat /var/log/update_frontend.log
+### Processus de contribution
 
-4. Démarrage automatique du frontend
-Le script acript-autoStart-radioManager.sh s’exécute au démarrage pour garantir que le frontend est actif.
+1. **Fork** le repository
+2. Créez une branche : `git checkout -b feature/nouveau-script`
+3. Suivez les standards définis dans [AGENT.md](AGENT.md)
+4. Documentez complètement votre script (fichier `.md` obligatoire)
+5. Testez sur un système propre
+6. Soumettez une Pull Request avec description détaillée
 
-Étapes :
-Téléchargez le script :
+### Standards de commit
 
-    wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/acript-autoStart-radioManager.sh -O /usr/local/bin/start-radioaudace.sh
+```bash
+feat: Ajouter script d'installation [technologie]
+fix: Corriger erreur dans [script]
+docs: Mettre à jour documentation [script]
+refactor: Améliorer [script] sans changement fonctionnel
+```
 
-Rendez-le exécutable :
+## 🛠️ Dépannage général
 
-    chmod +x /usr/local/bin/start-radioaudace.sh
+### Logs à consulter
 
-Créez un service systemd :
+```bash
+# Nginx
+sudo tail -f /var/log/nginx/error.log
 
-    sudo nano /etc/systemd/system/start-radioaudace.service
+# Services systemd
+sudo journalctl -u [nom-service] -f
 
-Ajoutez ce contenu :
+# Scripts personnalisés
+cat /var/log/[nom-script].log
+```
 
-    [Unit]
-    Description=Démarre le site radioaudace après un reboot
-    After=network.target
+### Problèmes courants
 
-    [Service]
-    ExecStart=/usr/local/bin/start-radioaudace.sh
-    Type=oneshot
-    RemainAfterExit=yes
-    User=root
+#### Certificat SSL échoue
+```bash
+# Vérifier DNS
+nslookup votre-domaine.com
 
-    [Install]
-    WantedBy=multi-user.target
+# Re-tenter Certbot
+sudo certbot --nginx -d votre-domaine.com --force-renewal
+```
 
-Activez le service :
+#### Service ne démarre pas
+```bash
+# Vérifier le statut
+sudo systemctl status [service]
 
-    sudo systemctl enable start-radioaudace.service
-    sudo systemctl start start-radioaudace.service
+# Voir les erreurs détaillées
+sudo journalctl -u [service] -n 50 --no-pager
+```
 
-Vérifiez les logs après un redémarrage :
+#### Port déjà utilisé
+```bash
+# Identifier le processus
+sudo netstat -tlnp | grep :[port]
 
-    cat /var/log/start_radioaudace.log
+# Ou avec ss (plus moderne)
+sudo ss -tlnp | grep :[port]
+```
 
+#### Erreur de permissions
+```bash
+# Vérifier les permissions
+ls -la /chemin/vers/fichier
 
-Configuration Icecast
-Le fichier config-audaceStream-IceCast.xml est utilisé par API-setup_server.sh pour configurer Icecast. Il définit :
+# Corriger si nécessaire
+sudo chown -R utilisateur:groupe /chemin/vers/dossier
+sudo chmod 755 /chemin/vers/script.sh
+```
 
-- Un point de montage /stream.mp3 avec un bitrate de 32 kbps.
-- Une limite de 200 auditeurs.
-- Des mots de passe par défaut (D3faultpass) pour les sources, relais et admin (à modifier pour la sécurité).
+## 📞 Support
 
-Pour personnaliser davantage, éditez ce fichier avant d’exécuter le script.
+### Ressources
+- **Issues GitHub** : [github.com/lwilly3/scripts-radioManager/issues](https://github.com/lwilly3/scripts-radioManager/issues)
+- **Documentation** : Fichiers `.md` dans chaque dossier
+- **Guide contributeurs** : [AGENT.md](AGENT.md)
 
+### Contact
+- **GitHub** : [@lwilly3](https://github.com/lwilly3)
+- **Repository** : [scripts-radioManager](https://github.com/lwilly3/scripts-radioManager)
 
-Dépannage
+### Communauté
+Pour signaler un bug, demander une fonctionnalité ou poser une question :
+1. Vérifiez d'abord les [Issues existantes](https://github.com/lwilly3/scripts-radioManager/issues)
+2. Consultez la documentation du script concerné
+3. Créez une nouvelle Issue avec le template approprié
 
-Logs Nginx : sudo tail -f /var/log/nginx/error.log
+## 📜 Licence
 
-Logs Icecast : sudo tail -f /var/log/icecast2/error.log
+Ce projet est sous licence libre. Vous êtes libre d'utiliser, modifier et distribuer ces scripts.
 
-Logs API : sudo journalctl -u api
+## 🌟 Remerciements
 
-Logs Frontend : cat /var/log/update_frontend.log ou cat /var/log/start_radioaudace.log
+Merci à tous les contributeurs qui améliorent continuellement ces scripts !
 
-Si Certbot échoue, vérifiez que vos domaines pointent correctement vers l’IP du serveur via les enregistrements DNS.
+**Technologies utilisées** : Bash, PowerShell, Python, Node.js, Docker, Nginx, PostgreSQL, WireGuard, Certbot
 
+---
 
-Contributions
-Les contributions sont les bienvenues ! Si vous souhaitez améliorer ces scripts :
+**⭐ N'oubliez pas de mettre une étoile au repository si ces scripts vous ont été utiles !**
 
-Forkez le dépôt.
-Créez une branche pour vos modifications.
-Soumettez une pull request.
+---
 
+<div align="center">
 
+**Dernière mise à jour** : Décembre 2025  
+**Version** : 2.0  
+**Mainteneur** : [@lwilly3](https://github.com/lwilly3)
 
-Licence
-Ce projet est sous licence libre.
+Made with ❤️ for the DevOps community
+
+</div>
