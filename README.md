@@ -15,7 +15,8 @@ Bienvenue dans le dépôt **scripts-radioManager** ! Ce repository contient une 
   - [API Audace](#1-api-audace---streaming--api)
   - [RadioManager Frontend](#2-radiomanager---frontend-vite)
   - [N8N Automation](#3-n8n---automatisation-de-workflows)
-  - [VPN WireGuard](#4-vpn-wireguard)
+  - [Solutions Docker](#4-solutions-docker-)
+  - [VPN WireGuard](#5-vpn-wireguard)
 - [Documentation](#-documentation)
 - [Prérequis généraux](#-prérequis-généraux)
 - [Guide de contribution](#-guide-de-contribution)
@@ -28,6 +29,7 @@ Ce repository regroupe des scripts pour :
 - **Déploiement d'API** : FastAPI + PostgreSQL + Icecast
 - **Frontend moderne** : Vite + Node.js + Nginx
 - **Automatisation** : N8N sur EC2 Amazon Linux
+- **Solutions Docker** : Conteneurs pour RadioManager et API Audace
 - **Solutions VPN** : WireGuard pour serveur, routeur MikroTik et clients Windows
 
 **Systèmes supportés** : Ubuntu 24.10, Amazon Linux 2/2023, Windows 10/11, MikroTik RouterOS 7.x
@@ -58,6 +60,18 @@ scripts-radioManager/
 │   ├── Script_installation_N8N_sur_EC2_AmazonLinux.md
 │   ├── Script_MAJ_N8N.sh
 │   └── Script_MAJ_N8N.md
+│
+├── Docker/                         # 🐳 Solutions Docker
+│   ├── radioManager-docker/
+│   │   ├── README.md
+│   │   ├── Dockerfile
+│   │   ├── docker-compose.yml
+│   │   └── nginx.conf
+│   └── api-audace-docker/
+│       ├── README.md
+│       ├── docker-compose.yml
+│       └── nginx/
+│           └── nginx.conf
 │
 └── VPN wireguard/                  # 🔒 Solutions VPN
     ├── serveur VPN/
@@ -150,11 +164,91 @@ sudo bash Script_installation_N8N_sur_EC2_AmazonLinux.sh
 
 ---
 
-### 4. VPN WireGuard
+### 4. Solutions Docker 🐳
+
+**Description** : Déploiement des applications RadioManager et API Audace dans des conteneurs Docker pour une meilleure portabilité et isolation.
+
+#### 4.1 RadioManager Frontend (Docker)
+
+Déploiement du frontend Vite dans un conteneur avec Nginx.
+
+**Avantages** :
+- ✅ Déploiement reproductible
+- ✅ Isolation complète de l'environnement
+- ✅ Facilité de mise à jour et rollback
+- ✅ Scalabilité horizontale simple
+- ✅ Idéal pour développement et production
+
+**Documentation** : [`Docker/radioManager-docker/README.md`](Docker/radioManager-docker/README.md)
+
+**Quick Start** :
+```bash
+cd Docker/radioManager-docker
+docker-compose up -d
+```
+
+#### 4.2 API Audace Stack (Docker)
+
+Stack complète avec FastAPI, PostgreSQL, Icecast et Nginx dans des conteneurs orchestrés.
+
+**Documentation** : [`Docker/api-audace-docker/README.md`](Docker/api-audace-docker/README.md)
+
+**Quick Start** :
+```bash
+cd Docker/api-audace-docker
+docker-compose up -d
+```
+
+**Résultat** : Tous les services accessibles via Nginx comme reverse proxy.
+
+#### 4.3 Déploiement avec Dockploy 🚀
+
+Dockploy est une plateforme d'hébergement moderne qui simplifie le déploiement d'applications Docker avec interface web intuitive.
+
+**Avantages de Dockploy** :
+- ✅ Interface web élégante et moderne
+- ✅ Déploiement en un clic depuis Git
+- ✅ SSL automatique avec Let's Encrypt
+- ✅ Monitoring intégré (CPU, RAM, réseau)
+- ✅ Gestion multi-projets et multi-domaines
+- ✅ Logs en temps réel
+- ✅ Rollback instantané
+- ✅ Variables d'environnement sécurisées
+- ✅ Support Docker Compose natif
+- ✅ Webhooks pour CI/CD automatique
+
+**Cas d'usage recommandés** :
+- 🎯 Équipes qui veulent une interface graphique
+- 🎯 Projets multiples sur un même serveur
+- 🎯 Besoin de monitoring intégré
+- 🎯 Déploiements fréquents depuis Git
+- 🎯 Gestion simplifiée des certificats SSL
+
+**Documentation** : [`Docker/dockploy-deployment/README.md`](Docker/dockploy-deployment/README.md)
+
+**Quick Start - Installation Dockploy** :
+```bash
+# Installer Dockploy sur votre serveur
+curl -sSL https://dockploy.com/install.sh | sh
+
+# Accéder à l'interface : https://votre-ip:3000
+```
+
+**Quick Start - Déployer RadioManager** :
+1. Créer un nouveau projet dans Dockploy
+2. Connecter votre repository Git
+3. Configurer le domaine et les variables
+4. Déployer en un clic !
+
+**Résultat** : Application déployée avec monitoring, logs et SSL automatique.
+
+---
+
+### 5. VPN WireGuard
 
 **Description** : Solutions VPN WireGuard pour différents cas d'usage.
 
-#### 4.1 Serveur VPN (WG-Easy)
+#### 5.1 Serveur VPN (WG-Easy)
 
 Installation d'un serveur VPN avec interface web de gestion.
 
@@ -168,7 +262,7 @@ sudo bash install-wg-easy-nginx.sh
 
 **Résultat** : Interface WG-Easy sur `https://vps.monassurance.net`
 
-#### 4.2 Client MikroTik
+#### 5.2 Client MikroTik
 
 Configuration d'un routeur MikroTik en client VPN WireGuard.
 
@@ -176,7 +270,7 @@ Configuration d'un routeur MikroTik en client VPN WireGuard.
 
 **Utilisation** : Copier-coller les commandes dans le terminal RouterOS via Winbox ou SSH.
 
-#### 4.3 Client Windows (sans droits admin)
+#### 5.3 Client Windows (sans droits admin)
 
 Solution pour utilisateurs de domaine Active Directory sans privilèges administrateur.
 
@@ -318,40 +412,12 @@ sudo chmod 755 /chemin/vers/script.sh
 ### Ressources
 - **Issues GitHub** : [github.com/lwilly3/scripts-radioManager/issues](https://github.com/lwilly3/scripts-radioManager/issues)
 - **Documentation** : Fichiers `.md` dans chaque dossier
-- **Guide contributeurs** : [AGENT.md](AGENT.md)
+- **Guide de contribution** : [`AGENT.md`](AGENT.md)
+- **Forum communautaire** : [forum.radioaudace.com](https://forum.radioaudace.com)
 
 ### Contact
-- **GitHub** : [@lwilly3](https://github.com/lwilly3)
-- **Repository** : [scripts-radioManager](https://github.com/lwilly3/scripts-radioManager)
-
-### Communauté
-Pour signaler un bug, demander une fonctionnalité ou poser une question :
-1. Vérifiez d'abord les [Issues existantes](https://github.com/lwilly3/scripts-radioManager/issues)
-2. Consultez la documentation du script concerné
-3. Créez une nouvelle Issue avec le template approprié
-
-## 📜 Licence
-
-Ce projet est sous licence libre. Vous êtes libre d'utiliser, modifier et distribuer ces scripts.
-
-## 🌟 Remerciements
-
-Merci à tous les contributeurs qui améliorent continuellement ces scripts !
-
-**Technologies utilisées** : Bash, PowerShell, Python, Node.js, Docker, Nginx, PostgreSQL, WireGuard, Certbot
+Pour toute question ou problème non résolu, ouvrez une issue sur GitHub ou contactez-nous via le forum communautaire. Nous nous efforçons de répondre dans les plus brefs délais.
 
 ---
 
-**⭐ N'oubliez pas de mettre une étoile au repository si ces scripts vous ont été utiles !**
-
----
-
-<div align="center">
-
-**Dernière mise à jour** : Décembre 2025  
-**Version** : 2.0  
-**Mainteneur** : [@lwilly3](https://github.com/lwilly3)
-
-Made with ❤️ for the DevOps community
-
-</div>
+Merci d'utiliser **scripts-radioManager** ! Nous espérons que ces outils faciliteront la gestion et le déploiement de vos infrastructures. N'hésitez pas à contribuer et à faire grandir cette communauté !
