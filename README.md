@@ -40,6 +40,8 @@ Ce repository regroupe des scripts pour :
 
 **Systèmes supportés** : Ubuntu 24.10, Amazon Linux 2/2023, Windows 10/11, MikroTik RouterOS 7.x
 
+**Fuseau horaire par défaut** : Africa/Douala (UTC+1, Cameroun)
+
 ## 📁 Structure du repository
 
 ```
@@ -73,11 +75,23 @@ scripts-radioManager/
 │   │   ├── Dockerfile
 │   │   ├── docker-compose.yml
 │   │   └── nginx.conf
-│   └── api-audace-docker/
-│       ├── README.md
-│       ├── docker-compose.yml
-│       └── nginx/
-│           └── nginx.conf
+│   ├── api-audace-docker/
+│   │   ├── README.md
+│   │   ├── docker-compose.yml
+│   │   └── nginx/
+│   │       └── nginx.conf
+│   └── quick-prepare-vps-for-dockploy/    # ⭐ RÉORGANISÉ
+│       ├── README.md                       # Guide principal
+│       ├── quick-prepare-vps.sh            # Script de préparation
+│       ├── docs/
+│       │   ├── USAGE.md                    # Guide d'utilisation détaillé
+│       │   ├── PREPARATION.md              # Guide préparation complète
+│       │   ├── POST-INSTALL.md             # État post-installation
+│       │   ├── FAIL2BAN-EMAIL.md           # Configuration Fail2ban
+│       │   ├── VARIABLES.md                # Guide variables d'env
+│       │   └── MIGRATION.md                # Guide de migration
+│       └── examples/
+│           └── .env.example                # Template configuration
 │
 └── VPN wireguard/                  # 🔒 Solutions VPN
     ├── serveur VPN/
@@ -230,12 +244,12 @@ Dockploy est une plateforme d'hébergement moderne qui simplifie le déploiement
 - 🎯 Déploiements fréquents depuis Git
 - 🎯 Gestion simplifiée des certificats SSL
 
-**Documentation** : [`Docker/dockploy-deployment/README.md`](Docker/dockploy-deployment/README.md)
+**Documentation** : [`Docker/quick-prepare-vps-for-dockploy/README.md`](Docker/quick-prepare-vps-for-dockploy/README.md)
 
 **Quick Start - Installation Dockploy** :
 ```bash
 # Installer Dockploy sur votre serveur
-curl -sSL https://dockploy.com/install.sh | sh
+curl -sSL https://dokploy.com/install.sh | sh
 
 # Accéder à l'interface : https://votre-ip:3000
 ```
@@ -369,13 +383,18 @@ docker-compose logs -f
 #### Option 2 : Dockploy (Interface graphique)
 
 ```bash
-# 1. Installer Dockploy sur votre VPS
-curl -sSL https://dockploy.com/install.sh | sh
+# 1. Préparer le serveur (sécurité + optimisations)
+# Timezone par défaut : Africa/Douala (Cameroun, UTC+1)
+wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/Docker/quick-prepare-vps-for-dockploy/quick-prepare-vps.sh
+sudo bash quick-prepare-vps.sh
 
-# 2. Accéder à l'interface web
+# 2. Installer Dokploy
+curl -sSL https://dokploy.com/install.sh | sh
+
+# 3. Accéder à l'interface web
 https://votre-ip:3000
 
-# 3. Créer un nouveau projet
+# 4. Créer un nouveau projet
 - Cliquer "New Project"
 - Connecter votre repository Git
 - Configurer les variables d'environnement
@@ -385,6 +404,14 @@ https://votre-ip:3000
 **Temps estimé** : ⏱️ 10 minutes  
 **Compétences requises** : Aucune (interface graphique)  
 **Résultat** : Monitoring, logs, SSL automatique
+
+**📋 Documentation détaillée** :
+- [Guide Quick Prepare VPS](Docker/quick-prepare-vps-for-dockploy/README.md) 📚 **Principal**
+- [Guide d'utilisation](Docker/quick-prepare-vps-for-dockploy/docs/USAGE.md) ⭐ **Recommandé**
+- [Préparation VPS complète](Docker/quick-prepare-vps-for-dockploy/docs/PREPARATION.md)
+- [État post-installation](Docker/quick-prepare-vps-for-dockploy/docs/POST-INSTALL.md)
+- [Configuration Fail2ban](Docker/quick-prepare-vps-for-dockploy/docs/FAIL2BAN-EMAIL.md)
+- [Variables d'environnement](Docker/quick-prepare-vps-for-dockploy/docs/VARIABLES.md)
 
 ---
 
@@ -724,6 +751,9 @@ sudo grep "Failed password" /var/log/auth.log | tail -20
 # Scanner les vulnérabilités (mise à jour système)
 sudo apt update
 apt list --upgradable
+
+# Configurer les notifications email Fail2ban (recommandé)
+# Voir : Docker/quick-prepare-vps-for-dockploy/docs/FAIL2BAN-EMAIL.md
 ```
 
 ---
@@ -774,25 +804,16 @@ sudo systemctl restart sshd
 - [ ] Vidéos tutorielles YouTube
 - [ ] Guide migration vers Docker
 - [ ] Exemples de CI/CD complets
-- [ ] FAQ étendue
 
 ### Version 2.2 (Q2 2025) - Envisagée
-
-💡 **Nouvelles fonctionnalités** :
 - [ ] Support multi-cloud (AWS, Azure, GCP)
 - [ ] High Availability (HA) avec load balancing
+- [ ] Intégration Vault (secrets management)
 - [ ] Auto-scaling basé sur métriques
 - [ ] CDN integration (Cloudflare, Fastly)
 - [ ] Support ARM64 (Raspberry Pi, Apple Silicon)
 
-🔐 **Sécurité** :
-- [ ] Scripts de hardening automatiques
-- [ ] Intégration Vault (secrets management)
-- [ ] Compliance checkers (OWASP, CIS)
-
 ### Version 3.0 (Q4 2025) - Vision
-
-🚀 **Grandes évolutions** :
 - [ ] Interface web d'administration complète
 - [ ] Marketplace de plugins
 - [ ] Support multi-langues (EN, ES, DE)
@@ -801,7 +822,7 @@ sudo systemctl restart sshd
 
 ---
 
-### Contribution à la roadmap
+## Contribution
 
 Vous avez une idée ? Participez !
 
@@ -810,6 +831,8 @@ Vous avez une idée ? Participez !
 3. **Voter pour une feature** : 👍 sur l'issue correspondante
 4. **Contribuer au code** : Pull request avec tests et documentation
 
+**Guide de contribution** : [`AGENT.md`](AGENT.md)
+
 ---
 
 ## 📞 Support
@@ -817,17 +840,14 @@ Vous avez une idée ? Participez !
 ### Ressources
 - **Issues GitHub** : [github.com/lwilly3/scripts-radioManager/issues](https://github.com/lwilly3/scripts-radioManager/issues)
 - **Documentation** : Fichiers `.md` dans chaque dossier
+- **Discussions** : [github.com/lwilly3/scripts-radioManager/discussions](https://github.com/lwilly3/scripts-radioManager/discussions)
 - **Guide de contribution** : [`AGENT.md`](AGENT.md)
+- **Changelog** : [CHANGELOG.md](CHANGELOG.md)
 - **Forum communautaire** : [forum.radioaudace.com](https://forum.radioaudace.com)
 
 ### Ressources complémentaires
 
 - **Wiki** : [github.com/lwilly3/scripts-radioManager/wiki](https://github.com/lwilly3/scripts-radioManager/wiki)
-- **Discussions** : [github.com/lwilly3/scripts-radioManager/discussions](https://github.com/lwilly3/scripts-radioManager/discussions)
-- **Changelog** : [CHANGELOG.md](CHANGELOG.md)
-- **License** : [LICENSE](LICENSE)
-
-### FAQ rapide
 
 **Q: Quelle solution choisir entre Docker et scripts bash ?**  
 R: Docker pour isolation et portabilité, scripts bash pour performances et simplicité sur serveur dédié.
@@ -835,27 +855,10 @@ R: Docker pour isolation et portabilité, scripts bash pour performances et simp
 **Q: Combien d'auditeurs simultanés peut supporter un VPS à $10/mois ?**  
 R: Environ 100-200 auditeurs avec un stream 128kbps (≈2.5 MB/s).
 
-**Q: Les mises à jour sont-elles automatiques ?**  
-R: Avec Dockploy + webhooks oui, sinon exécuter manuellement les scripts de mise à jour.
-
-**Q: Comment migrer d'une installation classique vers Docker ?**  
-R: Voir le guide de migration dans [Docker/MIGRATION.md](Docker/MIGRATION.md)
-
 **Q: Le projet est-il maintenu activement ?**  
 R: Oui ! Vérifiez l'activité sur [GitHub Activity](https://github.com/lwilly3/scripts-radioManager/graphs/commit-activity)
 
 ---
 
-<div align="center">
-
-**⭐ N'oubliez pas de mettre une étoile au repository si ces scripts vous ont été utiles !**
-
----
-
-**Dernière mise à jour** : Décembre 2024  
-**Version** : 2.0  
-**Mainteneur** : [@lwilly3](https://github.com/lwilly3)
-
-Made with ❤️ for the DevOps community
-
-</div>
+<div align="center">**Version** : 2.0  
+**Dernière mise à jour** : Décembre 2024  </div>
