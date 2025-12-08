@@ -10,6 +10,7 @@ Bienvenue dans le dépôt **scripts-radioManager** ! Ce repository contient une 
 ## 📋 Table des matières
 
 - [Vue d'ensemble](#-vue-densemble)
+- [🚀 Quick Start (Installation rapide)](#-quick-start-installation-rapide)
 - [Structure du repository](#-structure-du-repository)
 - [Projets disponibles](#-projets-disponibles)
   - [API Audace](#1-api-audace---streaming--api)
@@ -17,10 +18,15 @@ Bienvenue dans le dépôt **scripts-radioManager** ! Ce repository contient une 
   - [N8N Automation](#3-n8n---automatisation-de-workflows)
   - [Solutions Docker](#4-solutions-docker-)
   - [VPN WireGuard](#5-vpn-wireguard)
+- [📊 Tableau comparatif des solutions](#-tableau-comparatif-des-solutions)
+- [🎯 Cas d'usage et recommandations](#-cas-dusage-et-recommandations)
 - [Documentation](#-documentation)
 - [Prérequis généraux](#-prérequis-généraux)
+- [🔄 Mises à jour et maintenance](#-mises-à-jour-et-maintenance)
+- [🔒 Sécurité et bonnes pratiques](#-sécurité-et-bonnes-pratiques)
 - [Guide de contribution](#-guide-de-contribution)
 - [Dépannage](#-dépannage-général)
+- [📈 Roadmap](#-roadmap)
 - [Support](#-support)
 
 ## 🎯 Vue d'ensemble
@@ -324,88 +330,487 @@ Chaque script dispose d'une documentation complète au format Markdown (`.md`) d
 - ✅ Accès Winbox, WebFig ou SSH
 - ✅ Clés WireGuard générées depuis le serveur
 
-## 🎓 Guide de contribution
+## 🚀 Quick Start (Installation rapide)
 
-### Pour les contributeurs
+### Déploiement complet en 10 minutes
 
-Avant de contribuer, consultez le fichier **[AGENT.md](AGENT.md)** qui contient :
-- 📐 Standards de documentation obligatoires
-- 🎨 Templates de code (Bash, PowerShell)
-- 🔒 Bonnes pratiques de sécurité
-- 📊 Métriques de qualité (score minimal : 7/10)
-- ✅ Checklist de validation complète
+Vous voulez tester rapidement ? Voici la méthode la plus rapide pour avoir une stack complète fonctionnelle :
 
-### Processus de contribution
-
-1. **Fork** le repository
-2. Créez une branche : `git checkout -b feature/nouveau-script`
-3. Suivez les standards définis dans [AGENT.md](AGENT.md)
-4. Documentez complètement votre script (fichier `.md` obligatoire)
-5. Testez sur un système propre
-6. Soumettez une Pull Request avec description détaillée
-
-### Standards de commit
+#### Option 1 : Docker Compose (Recommandé pour débuter)
 
 ```bash
-feat: Ajouter script d'installation [technologie]
-fix: Corriger erreur dans [script]
-docs: Mettre à jour documentation [script]
-refactor: Améliorer [script] sans changement fonctionnel
+# 1. Cloner le repository
+git clone https://github.com/lwilly3/scripts-radioManager.git
+cd scripts-radioManager/Docker
+
+# 2. Choisir votre stack
+cd api-audace-docker  # Pour API + Database + Icecast
+# OU
+cd radioManager-docker  # Pour Frontend uniquement
+
+# 3. Configurer les variables
+cp .env.example .env
+nano .env  # Remplir les variables obligatoires
+
+# 4. Lancer la stack
+docker-compose up -d
+
+# 5. Vérifier que tout fonctionne
+docker-compose ps
+docker-compose logs -f
 ```
 
-## 🛠️ Dépannage général
+**Temps estimé** : ⏱️ 5-10 minutes  
+**Compétences requises** : Docker de base  
+**Résultat** : Stack complète opérationnelle avec SSL auto
 
-### Logs à consulter
+---
+
+#### Option 2 : Dockploy (Interface graphique)
 
 ```bash
-# Nginx
-sudo tail -f /var/log/nginx/error.log
+# 1. Installer Dockploy sur votre VPS
+curl -sSL https://dockploy.com/install.sh | sh
 
-# Services systemd
-sudo journalctl -u [nom-service] -f
+# 2. Accéder à l'interface web
+https://votre-ip:3000
 
-# Scripts personnalisés
-cat /var/log/[nom-script].log
+# 3. Créer un nouveau projet
+- Cliquer "New Project"
+- Connecter votre repository Git
+- Configurer les variables d'environnement
+- Déployer en un clic !
 ```
 
-### Problèmes courants
+**Temps estimé** : ⏱️ 10 minutes  
+**Compétences requises** : Aucune (interface graphique)  
+**Résultat** : Monitoring, logs, SSL automatique
 
-#### Certificat SSL échoue
+---
+
+#### Option 3 : Scripts Bash (Installation classique)
+
 ```bash
-# Vérifier DNS
-nslookup votre-domaine.com
+# API Backend complet
+wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/API%20audace/API-setup_server.sh
+chmod +x API-setup_server.sh
+sudo bash API-setup_server.sh
 
-# Re-tenter Certbot
-sudo certbot --nginx -d votre-domaine.com --force-renewal
+# Frontend Vue.js
+wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/radioManager/init-radioManager-frontend-server.sh
+chmod +x init-radioManager-frontend-server.sh
+sudo bash init-radioManager-frontend-server.sh
 ```
 
-#### Service ne démarre pas
+**Temps estimé** : ⏱️ 15-20 minutes  
+**Compétences requises** : Linux de base  
+**Résultat** : Installation directe sur le serveur (sans Docker)
+
+---
+
+### Première connexion
+
+Après déploiement, accédez aux interfaces :
+
+- **Frontend** : https://app.radioaudace.com
+- **API Docs** : https://api.radio.audace.ovh/docs
+- **Stream Audio** : https://radio.audace.ovh/stream.mp3
+- **Icecast Admin** : https://radio.audace.ovh/admin
+
+**Identifiants par défaut** (à changer immédiatement) :
+- Voir la documentation spécifique de chaque projet
+
+---
+
+## 📊 Tableau comparatif des solutions
+
+| Critère | Scripts Bash | Docker Compose | **Dockploy** | Installation manuelle |
+|---------|--------------|----------------|--------------|----------------------|
+| **Facilité d'installation** | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐ |
+| **Temps d'installation** | 15-20 min | 5-10 min | **5 min** | 30-60 min |
+| **Compétences requises** | Linux basique | Docker basique | **Aucune** | Linux avancé |
+| **Interface graphique** | ❌ | ❌ | ✅ | ❌ |
+| **Monitoring intégré** | ❌ | Logs uniquement | ✅ | À configurer |
+| **SSL automatique** | ✅ Certbot | À configurer | ✅ | À configurer |
+| **Mise à jour** | Script | Rebuild image | **1 clic** | Manuel |
+| **Rollback** | Manuel | Tag image | **1 clic** | Backup/restore |
+| **Multi-environnements** | Scripts séparés | docker-compose séparés | ✅ Natif | Configuration manuelle |
+| **Isolation** | ❌ | ✅ | ✅ | ❌ |
+| **Scalabilité** | Difficile | Moyenne | ✅ Facile | Difficile |
+| **Backup** | À configurer | Volumes Docker | À configurer | À configurer |
+| **Ressources (RAM)** | 1-2 GB | 2-4 GB | 2-4 GB | 1-2 GB |
+| **Portabilité** | ❌ | ✅ | ✅ | ❌ |
+| **Courbe d'apprentissage** | ⭐⭐⭐ | ⭐⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ |
+| **Coût (infrastructure)** | VPS $10/mois | VPS $15/mois | VPS $15/mois | VPS $10/mois |
+| **Support communautaire** | ✅ | ✅ | ✅ | ❌ |
+
+### 🏆 Nos recommandations
+
+| Profil | Solution recommandée | Pourquoi ? |
+|--------|---------------------|------------|
+| **Débutant** | Dockploy | Interface graphique, pas de ligne de commande |
+| **DevOps junior** | Docker Compose | Bon équilibre simplicité/contrôle |
+| **Sysadmin expérimenté** | Scripts Bash | Contrôle total, personnalisation maximale |
+| **Équipe de dev** | Dockploy | Collaboration facile, monitoring intégré |
+| **Agence web** | Dockploy | Multi-clients, scaling facile |
+| **Serveur limité (<2GB RAM)** | Scripts Bash | Moins de overhead Docker |
+| **Production critique** | Docker Compose | Isolation, rollback, haute disponibilité |
+| **POC/Test rapide** | Dockploy | Installation en 5 min |
+
+---
+
+## 🎯 Cas d'usage et recommandations
+
+### Cas 1 : Radio locale communautaire
+
+**Besoin** : Diffuser un stream audio avec une interface web simple
+
+**Solution recommandée** :
 ```bash
-# Vérifier le statut
-sudo systemctl status [service]
-
-# Voir les erreurs détaillées
-sudo journalctl -u [service] -n 50 --no-pager
+# Installation scripts bash
+API Audace (Icecast + API) + RadioManager Frontend
+Temps : 30 min
+Coût : VPS $10/mois
 ```
 
-#### Port déjà utilisé
+**Architecture** :
+```
+VPS Ubuntu 24.10
+├── Icecast (streaming)
+├── API FastAPI (gestion contenu)
+├── Frontend Vue.js (interface utilisateurs)
+└── PostgreSQL (base de données)
+```
+
+**Utilisateurs simultanés supportés** : 100-500
+
+---
+
+### Cas 2 : Plateforme SaaS multi-radios
+
+**Besoin** : Héberger plusieurs radios avec isolation et scaling
+
+**Solution recommandée** :
 ```bash
-# Identifier le processus
-sudo netstat -tlnp | grep :[port]
-
-# Ou avec ss (plus moderne)
-sudo ss -tlnp | grep :[port]
+# Dockploy avec multi-projets
+Chaque radio = 1 projet Dockploy
+Temps : 10 min par radio
+Coût : VPS $30-50/mois
 ```
 
-#### Erreur de permissions
+**Architecture** :
+```
+Serveur avec Dockploy
+├── Radio 1 (containers isolés)
+├── Radio 2 (containers isolés)
+├── Radio 3 (containers isolés)
+└── Base PostgreSQL partagée (optionnel)
+```
+
+**Radios supportées** : 5-10 par serveur
+
+---
+
+### Cas 3 : Environnements Dev/Staging/Prod
+
+**Besoin** : Développement en équipe avec CI/CD
+
+**Solution recommandée** :
 ```bash
-# Vérifier les permissions
-ls -la /chemin/vers/fichier
-
-# Corriger si nécessaire
-sudo chown -R utilisateur:groupe /chemin/vers/dossier
-sudo chmod 755 /chemin/vers/script.sh
+# Docker Compose + GitHub Actions
+3 serveurs séparés ou 1 serveur avec 3 stacks
+Temps : 1h de setup initial
+Coût : VPS $20-30/mois
 ```
+
+**Workflow** :
+```
+Dev (localhost) → Push Git → GitHub Actions
+                              ↓
+                         Staging (tests auto)
+                              ↓
+                    Production (après validation)
+```
+
+---
+
+### Cas 4 : Agence avec plusieurs clients
+
+**Besoin** : Gérer 10+ sites clients sur un serveur
+
+**Solution recommandée** :
+```bash
+# Dockploy Interface
+1 serveur avec Dockploy
+Chaque client = 1 projet
+Temps : 5 min par client
+Coût : VPS $40-60/mois
+```
+
+**Avantages** :
+- ✅ Interface centralisée
+- ✅ SSL automatique pour tous
+- ✅ Monitoring global
+- ✅ Facturation simplifiée
+
+---
+
+## 🔄 Mises à jour et maintenance
+
+### Stratégie de mise à jour
+
+#### Pour les scripts Bash
+
+```bash
+# 1. Vérifier la version actuelle
+systemctl status api
+journalctl -u api -n 20
+
+# 2. Télécharger la nouvelle version du script
+cd /opt/scripts-radioManager
+git pull origin main
+
+# 3. Exécuter le script de mise à jour
+sudo bash radioManager/update_frontend.sh
+
+# 4. Vérifier après mise à jour
+systemctl status radiomanager-frontend
+curl -I https://app.radioaudace.com
+```
+
+**Fréquence recommandée** : Mensuelle ou à chaque nouvelle release
+
+---
+
+#### Pour Docker Compose
+
+```bash
+# 1. Sauvegarder les données
+docker-compose exec postgres pg_dump -U audace_user audace_db > backup.sql
+
+# 2. Mettre à jour les images
+docker-compose pull
+
+# 3. Reconstruire et redémarrer
+docker-compose up -d --build
+
+# 4. Vérifier les logs
+docker-compose logs -f --tail=50
+```
+
+**Fréquence recommandée** : Bimensuelle ou à chaque security patch
+
+---
+
+#### Pour Dockploy
+
+```bash
+# Via l'interface web
+Project → Deployments → Latest → Deploy
+
+# Ou via webhook automatique (recommandé)
+GitHub → Settings → Webhooks → Ajouter webhook Dockploy
+```
+
+**Fréquence** : Automatique à chaque `git push` (CI/CD)
+
+---
+
+### Calendrier de maintenance recommandé
+
+| Tâche | Fréquence | Temps estimé |
+|-------|-----------|--------------|
+| **Mise à jour système** (apt update) | Hebdomadaire | 5 min |
+| **Mise à jour applications** | Mensuelle | 15-30 min |
+| **Backup base de données** | Quotidienne (automatisée) | 0 min |
+| **Vérification logs** | Hebdomadaire | 10 min |
+| **Test de restauration** | Trimestrielle | 30 min |
+| **Rotation secrets** (JWT, passwords) | Annuelle | 1h |
+| **Audit de sécurité** | Semestrielle | 2-3h |
+| **Renouvellement SSL** | Automatique | 0 min |
+
+---
+
+### Scripts de maintenance automatique
+
+Créez un cron job pour automatiser certaines tâches :
+
+```bash
+# Éditer le crontab
+sudo crontab -e
+
+# Ajouter ces lignes
+
+# Backup quotidien à 2h du matin
+0 2 * * * docker-compose exec postgres pg_dump -U audace_user audace_db > /backup/db_$(date +\%Y\%m\%d).sql
+
+# Nettoyage des vieux backups (>30 jours)
+0 3 * * * find /backup -name "db_*.sql" -mtime +30 -delete
+
+# Mise à jour système hebdomadaire (dimanche 3h)
+0 3 * * 0 apt update && apt upgrade -y && apt autoremove -y
+
+# Redémarrage mensuel (1er du mois à 4h)
+0 4 1 * * /sbin/reboot
+```
+
+---
+
+## 🔒 Sécurité et bonnes pratiques
+
+### Checklist de sécurité avant production
+
+#### Niveau 1 : Essentiel (Obligatoire)
+
+- [ ] **Mots de passe forts** (min 16 caractères, lettres+chiffres+symboles)
+- [ ] **SSL activé** sur tous les domaines (HTTPS uniquement)
+- [ ] **Pare-feu configuré** (UFW ou iptables)
+- [ ] **Ports non nécessaires fermés** (ne laisser que 22, 80, 443)
+- [ ] **SSH sécurisé** (désactiver root login, clés SSH uniquement)
+- [ ] **Variables d'environnement** (.env dans .gitignore)
+- [ ] **CORS configuré** (pas de wildcard `*` en production)
+- [ ] **JWT secrets rotatés** (différents dev/prod)
+- [ ] **Base de données** (utilisateur non-root, permissions limitées)
+- [ ] **Backups quotidiens** automatisés et testés
+
+#### Niveau 2 : Recommandé
+
+- [ ] **Fail2ban installé** (protection brute force SSH)
+- [ ] **Monitoring actif** (Prometheus, Grafana, ou Dockploy)
+- [ ] **Logs centralisés** (rotation, rétention limitée)
+- [ ] **Rate limiting API** (limiter requêtes par IP)
+- [ ] **Health checks** configurés pour tous les services
+- [ ] **Alertes email/Slack** en cas de downtime
+- [ ] **Certificats SSL** avec renouvellement auto vérifié
+- [ ] **Utilisateurs système** dédiés (pas de root)
+- [ ] **Docker secrets** (pour variables sensibles)
+- [ ] **WAF** (Web Application Firewall) si exposé publiquement
+
+#### Niveau 3 : Avancé (Production critique)
+
+- [ ] **Audit de sécurité** régulier (Lynis, OpenVAS)
+- [ ] **Intrusion detection** (AIDE, OSSEC)
+- [ ] **2FA activé** sur tous les comptes admin
+- [ ] **VPN** pour accès admin (pas de SSH public)
+- [ ] **Segmentation réseau** (VLAN, Docker networks)
+- [ ] **DDoS protection** (Cloudflare, AWS Shield)
+- [ ] **Chiffrement at-rest** (disques chiffrés)
+- [ ] **Conformité RGPD** (si données européennes)
+- [ ] **Pen testing** annuel
+- [ ] **Plan de reprise d'activité** (DRP) documenté et testé
+
+---
+
+### Commandes de sécurité utiles
+
+```bash
+# Audit rapide avec Lynis
+sudo apt install lynis
+sudo lynis audit system
+
+# Vérifier les ports ouverts
+sudo ss -tlnp
+
+# Tester la configuration SSL
+curl -I https://api.radio.audace.ovh
+sslscan api.radio.audace.ovh
+
+# Vérifier les certificats
+sudo certbot certificates
+
+# Logs de tentatives SSH échouées
+sudo grep "Failed password" /var/log/auth.log | tail -20
+
+# Scanner les vulnérabilités (mise à jour système)
+sudo apt update
+apt list --upgradable
+```
+
+---
+
+### Durcissement SSH (Hardening)
+
+```bash
+# Éditer la config SSH
+sudo nano /etc/ssh/sshd_config
+
+# Recommandations :
+PermitRootLogin no                    # Désactiver login root
+PasswordAuthentication no             # Uniquement clés SSH
+PubkeyAuthentication yes              # Activer clés publiques
+Port 2222                             # Changer le port (optionnel)
+MaxAuthTries 3                        # Limiter tentatives
+ClientAliveInterval 300               # Timeout inactivité
+ClientAliveCountMax 2
+AllowUsers votre_utilisateur          # Whitelist utilisateurs
+
+# Redémarrer SSH
+sudo systemctl restart sshd
+```
+
+---
+
+## 📈 Roadmap
+
+### Version actuelle : 2.0 (Décembre 2024)
+
+✅ Scripts bash pour Ubuntu 24.10  
+✅ Solutions Docker (Compose + Dockploy)  
+✅ Documentation complète  
+✅ Support RadioManager-SaaS + API Audace  
+✅ VPN WireGuard (serveur + clients)  
+✅ N8N Automation
+
+### Version 2.1 (Q1 2025) - Planifiée
+
+🔄 **En cours** :
+- [ ] Support Kubernetes (Helm charts)
+- [ ] Scripts pour Amazon Linux 2023
+- [ ] Monitoring avec Prometheus + Grafana
+- [ ] Solution de backup S3 automatique
+- [ ] Scripts Terraform pour infra as code
+
+📝 **Documentation** :
+- [ ] Vidéos tutorielles YouTube
+- [ ] Guide migration vers Docker
+- [ ] Exemples de CI/CD complets
+- [ ] FAQ étendue
+
+### Version 2.2 (Q2 2025) - Envisagée
+
+💡 **Nouvelles fonctionnalités** :
+- [ ] Support multi-cloud (AWS, Azure, GCP)
+- [ ] High Availability (HA) avec load balancing
+- [ ] Auto-scaling basé sur métriques
+- [ ] CDN integration (Cloudflare, Fastly)
+- [ ] Support ARM64 (Raspberry Pi, Apple Silicon)
+
+🔐 **Sécurité** :
+- [ ] Scripts de hardening automatiques
+- [ ] Intégration Vault (secrets management)
+- [ ] Compliance checkers (OWASP, CIS)
+
+### Version 3.0 (Q4 2025) - Vision
+
+🚀 **Grandes évolutions** :
+- [ ] Interface web d'administration complète
+- [ ] Marketplace de plugins
+- [ ] Support multi-langues (EN, ES, DE)
+- [ ] Dashboard unifié multi-projets
+- [ ] API REST pour gestion programmatique
+
+---
+
+### Contribution à la roadmap
+
+Vous avez une idée ? Participez !
+
+1. **Consulter les issues** : [github.com/lwilly3/scripts-radioManager/issues](https://github.com/lwilly3/scripts-radioManager/issues)
+2. **Proposer une feature** : Créer une issue avec le label `enhancement`
+3. **Voter pour une feature** : 👍 sur l'issue correspondante
+4. **Contribuer au code** : Pull request avec tests et documentation
+
+---
 
 ## 📞 Support
 
@@ -415,9 +820,42 @@ sudo chmod 755 /chemin/vers/script.sh
 - **Guide de contribution** : [`AGENT.md`](AGENT.md)
 - **Forum communautaire** : [forum.radioaudace.com](https://forum.radioaudace.com)
 
-### Contact
-Pour toute question ou problème non résolu, ouvrez une issue sur GitHub ou contactez-nous via le forum communautaire. Nous nous efforçons de répondre dans les plus brefs délais.
+### Ressources complémentaires
+
+- **Wiki** : [github.com/lwilly3/scripts-radioManager/wiki](https://github.com/lwilly3/scripts-radioManager/wiki)
+- **Discussions** : [github.com/lwilly3/scripts-radioManager/discussions](https://github.com/lwilly3/scripts-radioManager/discussions)
+- **Changelog** : [CHANGELOG.md](CHANGELOG.md)
+- **License** : [LICENSE](LICENSE)
+
+### FAQ rapide
+
+**Q: Quelle solution choisir entre Docker et scripts bash ?**  
+R: Docker pour isolation et portabilité, scripts bash pour performances et simplicité sur serveur dédié.
+
+**Q: Combien d'auditeurs simultanés peut supporter un VPS à $10/mois ?**  
+R: Environ 100-200 auditeurs avec un stream 128kbps (≈2.5 MB/s).
+
+**Q: Les mises à jour sont-elles automatiques ?**  
+R: Avec Dockploy + webhooks oui, sinon exécuter manuellement les scripts de mise à jour.
+
+**Q: Comment migrer d'une installation classique vers Docker ?**  
+R: Voir le guide de migration dans [Docker/MIGRATION.md](Docker/MIGRATION.md)
+
+**Q: Le projet est-il maintenu activement ?**  
+R: Oui ! Vérifiez l'activité sur [GitHub Activity](https://github.com/lwilly3/scripts-radioManager/graphs/commit-activity)
 
 ---
 
-Merci d'utiliser **scripts-radioManager** ! Nous espérons que ces outils faciliteront la gestion et le déploiement de vos infrastructures. N'hésitez pas à contribuer et à faire grandir cette communauté !
+<div align="center">
+
+**⭐ N'oubliez pas de mettre une étoile au repository si ces scripts vous ont été utiles !**
+
+---
+
+**Dernière mise à jour** : Décembre 2024  
+**Version** : 2.0  
+**Mainteneur** : [@lwilly3](https://github.com/lwilly3)
+
+Made with ❤️ for the DevOps community
+
+</div>

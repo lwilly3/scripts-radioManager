@@ -37,13 +37,13 @@
 
     <authentication>
         <!-- Sources log in with username 'source' -->
-        <source-password>D3faultpass</source-password>
+        <source-password>D3faultpass-a-changer</source-password>
         <!-- Relays log in with username 'relay' -->
-        <relay-password>D3faultpass</relay-password>
+        <relay-password>D3faultpass-a-changer</relay-password>
 
         <!-- Admin logs in with the username given below -->
         <admin-user>admin</admin-user>
-        <admin-password>D3faultpass</admin-password>
+        <admin-password>D3faultpass-a-changer</admin-password>
     </authentication>
 
     <!-- set the mountpoint for a shoutcast source to use, the default if not

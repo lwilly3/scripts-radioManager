@@ -869,78 +869,180 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-## 📊 Comparaison avec installation classique
+## 🎨 Déploiement RadioManager Frontend
 
-### Scénario 1 : Première installation
+### Prérequis du repository RadioManager-SaaS
 
-**Installation classique** :
-```bash
-# Temps : ~20 minutes
-sudo bash init-radioManager-frontend-server.sh
-# Potentiel conflits avec d'autres services
-# Configuration manuelle de Node.js, npm, Nginx
+**Repository** : https://github.com/lwilly3/radioManager-SaaS
+
+#### Technologies utilisées
+- **Framework** : Vue.js 3 avec Composition API
+- **Build Tool** : Vite 5.x
+- **Node.js** : Version 18+ (recommandé 20 LTS)
+- **Package Manager** : npm ou pnpm
+
+#### Structure attendue
+```
+radioManager-SaaS/
+├── src/                 # Code source Vue.js
+├── public/              # Assets statiques
+├── package.json         # Dépendances npm
+├── vite.config.js       # Configuration Vite
+├── index.html           # Point d'entrée HTML
+└── .env.example         # Template variables d'environnement
 ```
 
-**Docker** :
+#### Variables d'environnement requises
+
+**Variables critiques** :
 ```bash
-# Temps : ~5 minutes
-docker-compose up -d
-# Aucun conflit, isolation totale
-# Tout est pré-configuré dans l'image
+# API Backend
+VITE_API_BASE_URL=https://api.radio.audace.ovh
+# URL complète de l'API sans trailing slash
+# Utilisée pour toutes les requêtes HTTP (axios baseURL)
+
+# Streaming
+VITE_STREAM_URL=https://radio.audace.ovh/stream.mp3
+# URL du flux audio Icecast
+# Format supporté : MP3, OGG, AAC
+
+# Application
+VITE_APP_TITLE=Radio Audace
+# Titre affiché dans le <title> et la navbar
+
+VITE_APP_MODE=production
+# Mode de l'application : development | staging | production
 ```
 
-### Scénario 2 : Mise à jour
-
-**Installation classique** :
+**Variables optionnelles** :
 ```bash
-sudo bash update_frontend.sh
-# Risque de casser l'environnement Node.js
-# Nécessite de tester les dépendances
+# Authentification
+VITE_AUTH_TOKEN_KEY=auth_token
+# Nom de la clé dans localStorage pour le JWT
+
+# Features Flags
+VITE_ENABLE_REGISTRATION=true
+# Active/désactive l'inscription utilisateur
+
+VITE_ENABLE_SOCIAL_SHARE=true
+# Active les boutons de partage social
+
+# UI/UX
+VITE_THEME=dark
+# Thème par défaut : light | dark | auto
+
+VITE_LANGUAGE=fr
+# Langue par défaut : fr | en | es
+
+# Analytics
+VITE_ANALYTICS_ID=G-XXXXXXXXXX
+# Google Analytics 4 Measurement ID
+
+# Monitoring
+VITE_SENTRY_DSN=https://xxxxx@sentry.io/xxxxx
+# Sentry DSN pour le tracking d'erreurs
 ```
 
-**Docker** :
-```bash
-docker-compose up -d --build
-# Rollback facile : docker-compose down && docker-compose up -d
-# Environnement propre à chaque build
+#### Dépendances critiques
+
+**Runtime** :
+```json
+{
+  "vue": "^3.4.0",
+  "vue-router": "^4.2.0",
+  "pinia": "^2.1.0",
+  "axios": "^1.6.0"
+}
 ```
 
-### Scénario 3 : Scaling
-
-**Installation classique** :
-```bash
-# Dupliquer manuellement sur plusieurs serveurs
-# Installer et configurer chaque serveur
-# Configurer load balancer séparément
+**Build** :
+```json
+{
+  "vite": "^5.0.0",
+  "@vitejs/plugin-vue": "^5.0.0"
+}
 ```
 
-**Docker** :
-```bash
-docker-compose up -d --scale radiomanager=3
-# Ou utiliser Docker Swarm / Kubernetes
+#### Configuration Vite spécifique
+
+Le fichier `vite.config.js` doit contenir :
+```javascript
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+
+export default defineConfig({
+  plugins: [vue()],
+  server: {
+    port: 3000,
+    host: '0.0.0.0'
+  },
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    sourcemap: false,
+    minify: 'terser',
+    chunkSizeWarningLimit: 1000
+  }
+})
 ```
 
-## 📚 Ressources
+### Étape 1 : Créer un nouveau projet
 
-- **Docker Docs** : https://docs.docker.com/
-- **Docker Compose** : https://docs.docker.com/compose/
-- **Nginx Docker** : https://hub.docker.com/_/nginx
-- **Vite Docs** : https://vitejs.dev/guide/
-- **Repository** : https://github.com/lwilly3/scripts-radioManager
+```bash
+# Avec npm
+npm create vite@latest radioManager-SaaS --template vue
 
-## 🎯 Prochaines étapes
+# Ou avec pnpm
+pnpm create vite@latest radioManager-SaaS --template vue
+```
 
-Après ce déploiement Docker, vous pouvez :
+### Étape 2 : Installer les dépendances
 
-1. **Ajouter un monitoring** : Prometheus + Grafana
-2. **Orchestration avancée** : Kubernetes ou Docker Swarm
-3. **CI/CD** : GitHub Actions pour déploiement automatique
-4. **Backup automatisé** : Scripts de sauvegarde régulière
-5. **Multi-environnement** : Dev, staging, prod avec docker-compose
+```bash
+cd radioManager-SaaS
 
-## 📜 Licence
+# Avec npm
+npm install
 
-Ce projet est sous licence libre. Voir le fichier LICENSE à la racine du repository.
+# Ou avec pnpm
+pnpm install
+```
+
+### Étape 3 : Configurer les variables d'environnement
+
+Copiez le fichier `.env.example` en `.env` et modifiez les valeurs :
+
+```bash
+cp .env.example .env
+
+nano .env
+```
+
+### Étape 4 : Lancer le serveur de développement
+
+```bash
+# Avec npm
+npm run dev
+
+# Ou avec pnpm
+pnpm run dev
+```
+
+### Étape 5 : Construire pour la production
+
+```bash
+# Avec npm
+npm run build
+
+# Ou avec pnpm
+pnpm run build
+```
+
+### Étape 6 : Déployer avec Docker
+
+1. Suivez les étapes de la section **Installation** ci-dessus.
+2. Dans le fichier `docker-compose.yml`, modifiez les variables pour pointer vers votre repository RadioManager-SaaS.
+3. Lancez `docker-compose up -d` pour démarrer l'application.
 
 ---
 

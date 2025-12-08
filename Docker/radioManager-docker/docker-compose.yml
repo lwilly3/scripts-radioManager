@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  radiomanager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Arguments de build
+        GIT_REPO: ${GIT_REPO:-https://github.com/lwilly3/radioManager-SaaS.git}
+        GIT_BRANCH: ${GIT_BRANCH:-main}
+        NODE_ENV: production
+        BUILD_DATE: ${BUILD_DATE:-}
+        GIT_COMMIT: ${GIT_COMMIT:-}
+        
+        # Variables Vite embarquées dans le build
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+        VITE_STREAM_URL: ${VITE_STREAM_URL}
+        VITE_APP_TITLE: ${VITE_APP_TITLE:-RadioManager}
+        VITE_APP_MODE: ${VITE_APP_MODE:-production}
+        VITE_ENABLE_REGISTRATION: ${VITE_ENABLE_REGISTRATION:-true}
+        VITE_ENABLE_SOCIAL_SHARE: ${VITE_ENABLE_SOCIAL_SHARE:-true}
+        VITE_THEME: ${VITE_THEME:-dark}
+        VITE_LANGUAGE: ${VITE_LANGUAGE:-fr}
+        VITE_ANALYTICS_ID: ${VITE_ANALYTICS_ID:-}
+    
+    container_name: radiomanager-frontend
+    
+    # Redémarrage automatique
+    restart: unless-stopped
+    
+    # Ports
+    ports:
+      - "${APP_PORT:-80}:80"
+    
+    # Variables d'environnement runtime (pour Nginx)
+    environment:
+      - TZ=${TZ:-Europe/Paris}
+      - NGINX_HOST=${NGINX_HOST:-_}
+      - NGINX_PORT=${NGINX_PORT:-80}
+    
+    # Limites de ressources
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Logs
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Réseau
+    networks:
+      - radiomanager-network
+    
+    # Labels pour Traefik (si utilisé)
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.radiomanager.rule=Host(`${DOMAIN:-app.radioaudace.com}`)"
+      - "traefik.http.routers.radiomanager.entrypoints=websecure"
+      - "traefik.http.routers.radiomanager.tls.certresolver=letsencrypt"
+      - "traefik.http.services.radiomanager.loadbalancer.server.port=80"
+
+networks:
+  radiomanager-network:
+    driver: bridge
+    name: radiomanager-network
