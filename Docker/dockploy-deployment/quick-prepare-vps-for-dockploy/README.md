@@ -161,27 +161,20 @@ Serveur production-ready ✅
 
 ---
 
-## ⚡ Installation rapide
+## ⚡ Quick Start
 
-### Méthode 1 : Commande unique (Recommandé)
+### Installation en une commande
 
 ```bash
 # Télécharger et exécuter en une ligne
-wget -qO- https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/Docker/dockploy-deployment/quick-prepare-vps.sh | sudo bash
+wget -qO- https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/Docker/dockploy-deployment/quick-prepare-vps-for-dockploy/quick-prepare-vps.sh | sudo bash
 ```
 
-**⚠️ Attention** : Vous serez invité à entrer :
-- Changement port SSH ? (répondez `N` pour garder le port 22)
-- Mot de passe pour l'utilisateur `dokploy`
-- Confirmation pour lancer
-
----
-
-### Méthode 2 : Téléchargement puis exécution (Plus de contrôle)
+**Ou télécharger puis exécuter** :
 
 ```bash
-# 1. Télécharger le script
-wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/Docker/dockploy-deployment/quick-prepare-vps.sh
+# 1. Télécharger
+wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/Docker/dockploy-deployment/quick-prepare-vps-for-dockploy/quick-prepare-vps.sh
 
 # 2. Vérifier le contenu (optionnel mais recommandé)
 less quick-prepare-vps.sh
@@ -190,21 +183,6 @@ less quick-prepare-vps.sh
 chmod +x quick-prepare-vps.sh
 
 # 4. Exécuter avec sudo
-sudo bash quick-prepare-vps.sh
-```
-
----
-
-### Méthode 3 : Avec variables d'environnement prédéfinies
-
-```bash
-# Définir les variables avant exécution
-export NEW_USER="dokploy"
-export TIMEZONE="Africa/Douala"
-export SSH_PORT="22"
-
-# Télécharger et exécuter
-wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/Docker/dockploy-deployment/quick-prepare-vps.sh
 sudo bash quick-prepare-vps.sh
 ```
 
@@ -230,7 +208,7 @@ ssh -i ~/.ssh/ma_cle_ssh root@51.178.xx.xx
 
 ```bash
 # Depuis votre VPS (connecté en SSH)
-wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/Docker/dockploy-deployment/quick-prepare-vps.sh
+wget https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/Docker/dockploy-deployment/quick-prepare-vps-for-dockploy/quick-prepare-vps.sh
 
 # Vérifier que le fichier est téléchargé
 ls -lh quick-prepare-vps.sh

@@ -80,7 +80,7 @@ scripts-radioManager/
 │   │   ├── docker-compose.yml
 │   │   └── nginx/
 │   │       └── nginx.conf
-│   └── quick-prepare-vps-for-dockploy/    # ⭐ RÉORGANISÉ
+│   └── quick-prepare-vps-for-dockploy/    # ⭐ STRUCTURE SIMPLIFIÉE
 │       ├── README.md                       # Guide principal
 │       ├── quick-prepare-vps.sh            # Script de préparation
 │       ├── docs/
