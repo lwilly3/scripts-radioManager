@@ -280,7 +280,7 @@ function rap_settings_page() {
                     <tr>
                         <th scope="row"><label for="rap_api_url"><?php esc_html_e( 'URL de l\'API', 'radio-audace-player' ); ?></label></th>
                         <td>
-                            <input type="url" id="rap_api_url" name="rap_options[api_url]" value="<?php echo esc_attr( $options['api_url'] ); ?>" class="regular-text" placeholder="https://api.radio.audace.ovh">
+                            <input type="url" id="rap_api_url" name="rap_options[api_url]" value="<?php echo esc_attr( $options['api_url'] ); ?>" class="regular-text" placeholder="https://api.cloud.audace.ovh">
                             <p class="description"><?php esc_html_e( 'Adresse complete du backend RadioManager (ex: https://api.cloud.audace.ovh). Cette URL est utilisee cote serveur WordPress uniquement — jamais exposee dans le navigateur des visiteurs.', 'radio-audace-player' ); ?></p>
                         </td>
                     </tr>

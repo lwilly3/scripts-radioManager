@@ -49,7 +49,7 @@ function rap_get_defaults() {
         'auto_play'           => false,
 
         // Integration API RadioManager (v3)
-        'api_url'                => 'https://api.radio.audace.ovh',
+        'api_url'                => 'https://api.cloud.audace.ovh',
         'api_polling_interval'   => 60,
         'show_now_playing'       => true,
         'show_alert_banner'      => true,
