@@ -3,7 +3,7 @@
  * Plugin Name: Radio Audace Player
  * Plugin URI:  https://www.radioaudace.com
  * Description: Lecteur audio streaming personnalise pour Radio Audace 106.8 FM. Shortcode, widget, lecteur flottant avec skins multiples et lecture persistante entre les pages. Compatible Divi/Extra.
- * Version:     3.0.0
+ * Version:     3.1.0
  * Author:      Radio Audace
  * Author URI:  https://www.radioaudace.com
  * License:     GPL-2.0+
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'RAP_VERSION', '3.0.0' );
+define( 'RAP_VERSION', '3.1.0' );
 define( 'RAP_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'RAP_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
@@ -661,3 +661,4 @@ add_action( 'widgets_init', 'rap_register_widget' );
    ═══════════════════════════════════════════════════════════════════ */
 
 require_once RAP_PLUGIN_DIR . 'admin/settings.php';
+require_once RAP_PLUGIN_DIR . 'admin/updater.php';
