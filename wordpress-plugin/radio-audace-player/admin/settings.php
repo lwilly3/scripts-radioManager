@@ -273,19 +273,22 @@ function rap_settings_page() {
             <!-- ═══ SECTION : INTEGRATION API RADIOMANAGER ═══ -->
             <div class="rap-section">
                 <h2><?php esc_html_e( 'Integration API RadioManager', 'radio-audace-player' ); ?></h2>
+                <p class="description" style="margin-bottom:16px;">
+                    <?php esc_html_e( 'Connectez ce plugin a votre plateforme RadioManager pour synchroniser automatiquement les emissions, alertes et statistiques d\'ecoute. Toutes les donnees transitent via un proxy securise (admin-ajax.php) — l\'URL de l\'API n\'est jamais exposee aux visiteurs.', 'radio-audace-player' ); ?>
+                </p>
                 <table class="form-table" role="presentation">
                     <tr>
                         <th scope="row"><label for="rap_api_url"><?php esc_html_e( 'URL de l\'API', 'radio-audace-player' ); ?></label></th>
                         <td>
                             <input type="url" id="rap_api_url" name="rap_options[api_url]" value="<?php echo esc_attr( $options['api_url'] ); ?>" class="regular-text" placeholder="https://api.radio.audace.ovh">
-                            <p class="description"><?php esc_html_e( 'Adresse de l\'API RadioManager.', 'radio-audace-player' ); ?></p>
+                            <p class="description"><?php esc_html_e( 'Adresse complete du backend RadioManager (ex: https://api.cloud.audace.ovh). Cette URL est utilisee cote serveur WordPress uniquement — jamais exposee dans le navigateur des visiteurs.', 'radio-audace-player' ); ?></p>
                         </td>
                     </tr>
                     <tr>
-                        <th scope="row"><label for="rap_api_polling_interval"><?php esc_html_e( 'Intervalle de mise a jour', 'radio-audace-player' ); ?></label></th>
+                        <th scope="row"><label for="rap_api_polling_interval"><?php esc_html_e( 'Intervalle de mise a jour (secondes)', 'radio-audace-player' ); ?></label></th>
                         <td>
-                            <input type="number" id="rap_api_polling_interval" name="rap_options[api_polling_interval]" value="<?php echo esc_attr( $options['api_polling_interval'] ); ?>" class="small-text" min="15" max="300">
-                            <p class="description"><?php esc_html_e( 'Frequence de mise a jour des donnees en secondes (15 a 300).', 'radio-audace-player' ); ?></p>
+                            <input type="number" id="rap_api_polling_interval" name="rap_options[api_polling_interval]" value="<?php echo esc_attr( $options['api_polling_interval'] ); ?>" class="small-text" min="15" max="300"> <?php esc_html_e( 'secondes', 'radio-audace-player' ); ?>
+                            <p class="description"><?php esc_html_e( 'Toutes les X secondes, le player interroge l\'API pour rafraichir l\'emission en cours et les alertes. Valeur recommandee : 60. Minimum : 15, maximum : 300.', 'radio-audace-player' ); ?></p>
                         </td>
                     </tr>
                     <tr>
@@ -295,6 +298,7 @@ function rap_settings_page() {
                                 <input type="checkbox" name="rap_options[show_now_playing]" value="1" <?php checked( $options['show_now_playing'] ); ?>>
                                 <?php esc_html_e( 'Afficher l\'emission en cours dans le lecteur flottant', 'radio-audace-player' ); ?>
                             </label>
+                            <p class="description"><?php esc_html_e( 'Quand une emission est "en cours" dans RadioManager, son titre, son animateur et le segment actuel s\'affichent dans le player. Endpoint utilise : /public/now-playing.', 'radio-audace-player' ); ?></p>
                         </td>
                     </tr>
                     <tr>
@@ -302,24 +306,26 @@ function rap_settings_page() {
                         <td>
                             <label>
                                 <input type="checkbox" name="rap_options[show_alert_banner]" value="1" <?php checked( $options['show_alert_banner'] ); ?>>
-                                <?php esc_html_e( 'Afficher les alertes envoyees depuis RadioManager', 'radio-audace-player' ); ?>
+                                <?php esc_html_e( 'Afficher les bandeaux d\'alerte envoyes depuis RadioManager', 'radio-audace-player' ); ?>
                             </label>
+                            <p class="description"><?php esc_html_e( 'Les alertes creees dans RadioManager (page "Alertes WordPress") s\'affichent en bandeau anime en haut du site. 3 niveaux : Information (bleu), Avertissement (orange), Urgent (rouge).', 'radio-audace-player' ); ?></p>
                         </td>
                     </tr>
                     <tr>
-                        <th scope="row"><?php esc_html_e( 'Statistiques', 'radio-audace-player' ); ?></th>
+                        <th scope="row"><?php esc_html_e( 'Statistiques d\'ecoute', 'radio-audace-player' ); ?></th>
                         <td>
                             <label>
                                 <input type="checkbox" name="rap_options[analytics_enabled]" value="1" <?php checked( $options['analytics_enabled'] ); ?>>
                                 <?php esc_html_e( 'Envoyer les statistiques d\'ecoute a RadioManager', 'radio-audace-player' ); ?>
                             </label>
+                            <p class="description"><?php esc_html_e( 'Enregistre anonymement les evenements play/pause et un signal toutes les 30 secondes (heartbeat). Ces donnees alimentent la page "Auditeurs" du SaaS : ecoutes du jour, sessions uniques, duree moyenne, heure de pointe. Aucune donnee personnelle n\'est collectee.', 'radio-audace-player' ); ?></p>
                         </td>
                     </tr>
                     <tr>
                         <th scope="row"><label for="rap_wp_sync_secret"><?php esc_html_e( 'Cle secrete de synchronisation', 'radio-audace-player' ); ?></label></th>
                         <td>
-                            <input type="text" id="rap_wp_sync_secret" name="rap_options[wp_sync_secret]" value="<?php echo esc_attr( $options['wp_sync_secret'] ); ?>" class="regular-text">
-                            <p class="description"><?php esc_html_e( 'Cle utilisee pour securiser le cross-posting entre RadioManager et WordPress.', 'radio-audace-player' ); ?></p>
+                            <input type="text" id="rap_wp_sync_secret" name="rap_options[wp_sync_secret]" value="<?php echo esc_attr( $options['wp_sync_secret'] ); ?>" class="regular-text" placeholder="<?php esc_attr_e( 'ex: mon-secret-de-sync-2024', 'radio-audace-player' ); ?>">
+                            <p class="description"><?php esc_html_e( 'Cle partagee entre ce plugin et le backend. Quand une emission passe "en cours", le backend peut creer automatiquement un article WordPress (cross-posting). Cette cle doit etre identique a la variable WORDPRESS_SYNC_SECRET du backend. Laissez vide pour desactiver le cross-posting.', 'radio-audace-player' ); ?></p>
                         </td>
                     </tr>
                 </table>
