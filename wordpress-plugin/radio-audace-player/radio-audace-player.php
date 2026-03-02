@@ -158,7 +158,7 @@ function rap_ajax_now_playing() {
     if ( null === $data ) {
         wp_send_json_error( 'API injoignable' );
     }
-    wp_send_json( $data );
+    wp_send_json_success( $data );
 }
 add_action( 'wp_ajax_rap_now_playing', 'rap_ajax_now_playing' );
 add_action( 'wp_ajax_nopriv_rap_now_playing', 'rap_ajax_now_playing' );
@@ -170,7 +170,7 @@ function rap_ajax_schedule() {
     if ( null === $data ) {
         wp_send_json_error( 'API injoignable' );
     }
-    wp_send_json( $data );
+    wp_send_json_success( $data );
 }
 add_action( 'wp_ajax_rap_schedule', 'rap_ajax_schedule' );
 add_action( 'wp_ajax_nopriv_rap_schedule', 'rap_ajax_schedule' );
@@ -181,7 +181,7 @@ function rap_ajax_alert() {
     if ( null === $data ) {
         wp_send_json_error( 'API injoignable' );
     }
-    wp_send_json( $data );
+    wp_send_json_success( $data );
 }
 add_action( 'wp_ajax_rap_alert', 'rap_ajax_alert' );
 add_action( 'wp_ajax_nopriv_rap_alert', 'rap_ajax_alert' );
@@ -192,7 +192,7 @@ function rap_ajax_presenters() {
     if ( null === $data ) {
         wp_send_json_error( 'API injoignable' );
     }
-    wp_send_json( $data );
+    wp_send_json_success( $data );
 }
 add_action( 'wp_ajax_rap_presenters', 'rap_ajax_presenters' );
 add_action( 'wp_ajax_nopriv_rap_presenters', 'rap_ajax_presenters' );
@@ -218,7 +218,7 @@ function rap_ajax_analytics() {
     if ( is_wp_error( $response ) ) {
         wp_send_json_error( 'Echec envoi' );
     }
-    wp_send_json( json_decode( wp_remote_retrieve_body( $response ), true ) );
+    wp_send_json_success( json_decode( wp_remote_retrieve_body( $response ), true ) );
 }
 add_action( 'wp_ajax_rap_analytics', 'rap_ajax_analytics' );
 add_action( 'wp_ajax_nopriv_rap_analytics', 'rap_ajax_analytics' );
