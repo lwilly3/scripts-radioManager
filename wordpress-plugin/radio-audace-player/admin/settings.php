@@ -52,6 +52,14 @@ function rap_sanitize_options( $input ) {
     $sanitized['show_volume'] = ! empty( $input['show_volume'] );
     $sanitized['auto_play']   = ! empty( $input['auto_play'] );
 
+    $sanitized['api_url']              = ! empty( $input['api_url'] ) ? esc_url_raw( $input['api_url'] ) : $defaults['api_url'];
+    $sanitized['api_polling_interval'] = ! empty( $input['api_polling_interval'] ) ? intval( $input['api_polling_interval'] ) : $defaults['api_polling_interval'];
+    $sanitized['api_polling_interval'] = max( 15, min( 300, $sanitized['api_polling_interval'] ) );
+    $sanitized['show_now_playing']     = ! empty( $input['show_now_playing'] );
+    $sanitized['show_alert_banner']    = ! empty( $input['show_alert_banner'] );
+    $sanitized['analytics_enabled']    = ! empty( $input['analytics_enabled'] );
+    $sanitized['wp_sync_secret']       = ! empty( $input['wp_sync_secret'] ) ? sanitize_text_field( $input['wp_sync_secret'] ) : '';
+
     return $sanitized;
 }
 
@@ -262,6 +270,61 @@ function rap_settings_page() {
                 </table>
             </div>
 
+            <!-- ═══ SECTION : INTEGRATION API RADIOMANAGER ═══ -->
+            <div class="rap-section">
+                <h2><?php esc_html_e( 'Integration API RadioManager', 'radio-audace-player' ); ?></h2>
+                <table class="form-table" role="presentation">
+                    <tr>
+                        <th scope="row"><label for="rap_api_url"><?php esc_html_e( 'URL de l\'API', 'radio-audace-player' ); ?></label></th>
+                        <td>
+                            <input type="url" id="rap_api_url" name="rap_options[api_url]" value="<?php echo esc_attr( $options['api_url'] ); ?>" class="regular-text" placeholder="https://api.radio.audace.ovh">
+                            <p class="description"><?php esc_html_e( 'Adresse de l\'API RadioManager.', 'radio-audace-player' ); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="rap_api_polling_interval"><?php esc_html_e( 'Intervalle de mise a jour', 'radio-audace-player' ); ?></label></th>
+                        <td>
+                            <input type="number" id="rap_api_polling_interval" name="rap_options[api_polling_interval]" value="<?php echo esc_attr( $options['api_polling_interval'] ); ?>" class="small-text" min="15" max="300">
+                            <p class="description"><?php esc_html_e( 'Frequence de mise a jour des donnees en secondes (15 a 300).', 'radio-audace-player' ); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php esc_html_e( 'Emission en cours', 'radio-audace-player' ); ?></th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="rap_options[show_now_playing]" value="1" <?php checked( $options['show_now_playing'] ); ?>>
+                                <?php esc_html_e( 'Afficher l\'emission en cours dans le lecteur flottant', 'radio-audace-player' ); ?>
+                            </label>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php esc_html_e( 'Alertes', 'radio-audace-player' ); ?></th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="rap_options[show_alert_banner]" value="1" <?php checked( $options['show_alert_banner'] ); ?>>
+                                <?php esc_html_e( 'Afficher les alertes envoyees depuis RadioManager', 'radio-audace-player' ); ?>
+                            </label>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php esc_html_e( 'Statistiques', 'radio-audace-player' ); ?></th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="rap_options[analytics_enabled]" value="1" <?php checked( $options['analytics_enabled'] ); ?>>
+                                <?php esc_html_e( 'Envoyer les statistiques d\'ecoute a RadioManager', 'radio-audace-player' ); ?>
+                            </label>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="rap_wp_sync_secret"><?php esc_html_e( 'Cle secrete de synchronisation', 'radio-audace-player' ); ?></label></th>
+                        <td>
+                            <input type="text" id="rap_wp_sync_secret" name="rap_options[wp_sync_secret]" value="<?php echo esc_attr( $options['wp_sync_secret'] ); ?>" class="regular-text">
+                            <p class="description"><?php esc_html_e( 'Cle utilisee pour securiser le cross-posting entre RadioManager et WordPress.', 'radio-audace-player' ); ?></p>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
             <?php submit_button( __( 'Enregistrer les reglages', 'radio-audace-player' ) ); ?>
         </form>
 
@@ -300,6 +363,27 @@ function rap_settings_page() {
                     <tr>
                         <td><strong>Divi / Extra</strong></td>
                         <td><?php esc_html_e( 'Module "Texte" ou "Code" > coller le shortcode.', 'radio-audace-player' ); ?></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Programme</strong></td>
+                        <td>
+                            <code>[radio_audace_programme]</code><br>
+                            <?php esc_html_e( 'Affiche l\'emission en cours et la prochaine', 'radio-audace-player' ); ?>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Grille</strong></td>
+                        <td>
+                            <code>[radio_audace_grille]</code><br>
+                            <?php esc_html_e( 'Grille des programmes de la semaine', 'radio-audace-player' ); ?>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Equipe</strong></td>
+                        <td>
+                            <code>[radio_audace_equipe]</code><br>
+                            <?php esc_html_e( 'Affiche les fiches animateurs', 'radio-audace-player' ); ?>
+                        </td>
                     </tr>
                     <tr>
                         <td><strong>PHP</strong></td>

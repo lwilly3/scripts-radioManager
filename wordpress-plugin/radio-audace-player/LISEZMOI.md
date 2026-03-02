@@ -1,29 +1,40 @@
-# Radio Audace Player v2 — Plugin WordPress
+# Radio Audace Player v3 — Plugin WordPress
 
 Plugin WordPress personnalise pour le streaming audio de **Radio Audace 106.8 FM**.
 Compatible Divi / Extra. Lecture persistante entre les pages.
+**v3 : Integration API RadioManager** — Programme en direct, grille, alertes, equipe, analytics.
 
-## Nouveautes v2
+## Nouveautes v3
+
+- **Programme en direct** : affiche l'emission en cours + prochaine emission, synchronise depuis le SaaS RadioManager via l'API
+- **Grille des programmes** : shortcode `[radio_audace_grille]` pour afficher la grille hebdomadaire des emissions
+- **Bandeau d'alerte** : alertes info/warning/urgent poussees depuis le SaaS, affichees en bandeau anime en haut du site
+- **Fiches animateurs** : shortcode `[radio_audace_equipe]` pour la page "Notre equipe"
+- **Statistiques d'ecoute** : evenements play/pause/heartbeat envoyes au backend pour le dashboard SaaS
+- **Cross-posting** : creation automatique d'articles WordPress quand une emission passe en direct
+- **Proxy AJAX securise** : les appels API passent par WordPress (admin-ajax.php) avec nonce + cache transient
+- **Page d'administration etendue** : section "Integration API RadioManager" avec URL API, intervalle polling, toggles, cle secrete
+
+### Conserve de v2
 
 - **5 skins** configurables (Sombre, Clair, Verre depoli, Couleur Audace, Neon)
 - **3 types de lecteur flottant** (Barre minimisable, Bulle expansible, Mini barre retractable)
-- **Lecture persistante** : la musique continue quand le visiteur navigue entre les pages (Pjax + fallback sessionStorage)
-- **Bulle avec label "Ecouter en direct"** : indicateur visuel clair pour inviter l'internaute a ecouter la radio, avec animation d'attention et passage en "EN DIRECT" pendant la lecture
-- Lecteur flottant injecte automatiquement sur toutes les pages
+- **Lecture persistante** : Pjax + fallback sessionStorage
+- **Bulle avec label "Ecouter en direct"**
 - Interface admin avec selecteurs visuels
-- Correction du bug play/pause (le bouton ne restait plus fige apres arret)
+- Correction du bug play/pause
 
 ## Structure
 
 ```
 radio-audace-player/
-├── radio-audace-player.php         # Fichier principal (shortcode, widget, flottant)
+├── radio-audace-player.php         # Fichier principal (shortcode, widget, flottant, AJAX, REST)
 ├── admin/
-│   └── settings.php                # Page admin avec previews visuels
+│   └── settings.php                # Page admin avec previews visuels + section API
 ├── css/
-│   └── radio-audace-player.css     # 5 skins + 3 types flottants + responsive
+│   └── radio-audace-player.css     # 5 skins + 3 flottants + alerte + now-playing + grille + equipe
 ├── js/
-│   └── radio-audace-player.js      # Audio, Pjax, comportements flottants
+│   └── radio-audace-player.js      # Audio, Pjax, now-playing, alerte, analytics, grille, equipe
 ├── assets/
 │   └── default-logo.svg            # Logo par defaut
 └── LISEZMOI.md                     # Cette documentation
@@ -50,6 +61,17 @@ Ou par FTP : copier le dossier `radio-audace-player/` dans `/wp-content/plugins/
 | Couleur | Bouton play, accents | `#2ea3f2` |
 | Logo | Image ronde | Logo SVG par defaut |
 
+### Integration API RadioManager
+
+| Option | Description | Defaut |
+|--------|-------------|--------|
+| URL de l'API | Adresse du backend RadioManager | `https://api.radio.audace.ovh` |
+| Intervalle de mise a jour | Frequence de polling en secondes (15-300) | `60` |
+| Emission en cours | Afficher l'emission en cours dans le lecteur flottant | Active |
+| Alertes | Afficher les alertes depuis RadioManager | Active |
+| Statistiques | Envoyer les stats d'ecoute au backend | Active |
+| Cle secrete | Cle pour le cross-posting securise | (vide) |
+
 ### 5 Skins
 
 | Skin | Description |
@@ -64,11 +86,9 @@ Ou par FTP : copier le dossier `radio-audace-player/` dans `/wp-content/plugins/
 
 | Type | Comportement |
 |------|-------------|
-| **Barre** (`bar-float`) | Barre complete en bas de page. Bouton minimiser la reduit en pastille compacte (play + nom + badge). |
-| **Bulle** (`bubble`) | Bouton circulaire dans le coin avec label "Ecouter en direct". S'expanse en panel au clic. Se ferme au clic exterieur. Le label affiche "EN DIRECT" en rouge pendant la lecture. Animation d'attention au chargement. |
-| **Mini barre** (`mini-bar`) | Barre fine en bas. Se retracte en petite languette (play + chevron). |
-
-Tous les types conservent l'etat minimise/retracte via `localStorage` (persiste entre les pages).
+| **Barre** (`bar-float`) | Barre complete en bas de page. Bouton minimiser la reduit en pastille compacte. |
+| **Bulle** (`bubble`) | Bouton circulaire avec label "Ecouter en direct". S'expanse en panel au clic. |
+| **Mini barre** (`mini-bar`) | Barre fine en bas. Se retracte en petite languette. |
 
 ### Lecture Persistante
 
@@ -76,31 +96,32 @@ Quand activee, la navigation utilise la technique **Pjax** (fetch + remplacement
 - Les liens internes sont interceptes
 - Seul le contenu principal est remplace (pas de rechargement complet)
 - Le player et l'audio restent intacts
-- Le menu Divi est mis a jour, les modules re-initialises
+- Les shortcodes v3 sont re-initialises apres chaque navigation Pjax
 - Boutons back/forward du navigateur geres
 
-**Fallback** : si le Pjax echoue ou si la page est rechargee manuellement, le plugin utilise `sessionStorage` pour reprendre la lecture automatiquement (si l'interruption est < 5 secondes).
-
-**Selecteur CSS configurable** : par defaut, le plugin auto-detecte le conteneur Divi/Extra (`#main-content`, `#et-main-area`, `#content-area`). Possibilite de specifier un selecteur personnalise dans les reglages.
+**Fallback** : `sessionStorage` pour reprendre la lecture automatiquement (si l'interruption est < 5 secondes).
 
 ## Utilisation
 
-### Shortcode
+### Shortcodes
 
 ```
-[radio_audace_player]
-[radio_audace_player style="bar" skin="neon"]
-[radio_audace_player style="mini" skin="glass"]
+[radio_audace_player]                          # Player streaming
+[radio_audace_player style="bar" skin="neon"]  # Player avec options
+[radio_audace_programme]                       # Emission en cours + prochaine
+[radio_audace_grille]                          # Grille des programmes de la semaine
+[radio_audace_equipe]                          # Fiches animateurs
 ```
 
-Parametres :
+### Parametres du player
+
 - `style` : `bar` (horizontal) ou `mini` (vertical pour sidebar)
 - `skin` : `dark`, `light`, `glass`, `brand`, `neon`
 
 ### Dans Divi / Extra
 
 1. Ajouter un module **Texte** ou **Code**
-2. Coller : `[radio_audace_player]`
+2. Coller le shortcode souhaite
 3. Enregistrer
 
 ### Lecteur Flottant
@@ -115,23 +136,68 @@ Automatique sur toutes les pages quand active dans les reglages. Pas besoin de s
 
 ```php
 <?php echo do_shortcode('[radio_audace_player style="bar" skin="brand"]'); ?>
+<?php echo do_shortcode('[radio_audace_programme]'); ?>
+<?php echo do_shortcode('[radio_audace_grille]'); ?>
+<?php echo do_shortcode('[radio_audace_equipe]'); ?>
+```
+
+## Architecture v3
+
+```
+SAAS FRONTEND (React)              BACKEND FASTAPI
+app.cloud.audace.ovh               api.radio.audace.ovh
+┌──────────────────┐               ┌─────────────────────────┐
+│ Module Radio     │ ──── JWT ───> │ /public/now-playing     │ sans auth
+│ ├── Alertes WP   │               │ /public/schedule        │ sans auth
+│ └── Auditeurs    │               │ /public/alert           │ sans auth
+└──────────────────┘               │ /public/presenters      │ sans auth
+                                   │ /public/analytics/*     │ POST sans auth
+                                   │ /public/alerts (CRUD)   │ avec JWT
+                                   │ /public/analytics/stats │ avec JWT
+                                   └──────┬──────────────────┘
+                                          │
+        ┌─────────────────────────────────┘
+        ▼
+WORDPRESS (www.radioaudace.com)
+┌──────────────────────────────┐
+│ Plugin Radio Audace Player v3│
+│ ├── AJAX proxy → API backend │  (admin-ajax.php + nonce + cache 30s)
+│ ├── Shortcodes               │  [programme] [grille] [equipe]
+│ ├── Bandeau alerte           │  Auto-injecte via wp_footer
+│ ├── Analytics                │  play/pause/heartbeat → backend
+│ └── REST /sync-show          │  Cross-posting (cle secrete)
+└──────────────────────────────┘
 ```
 
 ## Notes techniques
 
 ### Gestion audio
-- Un seul element `<audio>` global partage par tous les players de la page
-- Arret propre avec flag `isStopping` pour eviter les evenements parasites du navigateur
-- Reconnexion fraiche au stream a chaque lecture (parametre `?t=timestamp` anti-cache)
+- Un seul element `<audio>` global partage par tous les players
+- Arret propre avec flag `isStopping` pour eviter les evenements parasites
+- Reconnexion fraiche au stream a chaque lecture (parametre `?t=timestamp`)
 
-### MediaSession API
-- Controles systeme (notifications, ecran de verrouillage)
-- Compatibilite casques bluetooth (play/pause)
+### Proxy AJAX
+- Les appels au backend passent par `admin-ajax.php` (pas d'appel direct depuis le navigateur)
+- L'URL du backend reste cote serveur WordPress (pas exposee au client)
+- Cache transient de 30 secondes pour limiter les appels
+- Nonce WordPress pour securisation CSRF
+
+### Cross-posting (P5)
+- Endpoint REST `POST /wp-json/rap/v1/sync-show`
+- Authentification par header `X-RAP-Sync-Secret`
+- Creation automatique d'articles WordPress quand une emission passe "en-cours"
+
+### Analytics (P6)
+- Session ID unique genere cote client (`sessionStorage`)
+- Evenements : `play`, `pause`, `heartbeat` (toutes les 30s)
+- Calcul de la duree d'ecoute reelle
+- Visible dans le dashboard SaaS (page "Auditeurs")
 
 ### Compatibilite Divi
-- Reset CSS isole pour eviter les conflits avec les styles Divi
+- Reset CSS isole pour eviter les conflits
 - `!important` sur les boutons pour contrer les overrides du theme
-- Re-initialisation des modules Divi apres navigation Pjax (`et_pb_init_modules`, `et_init_main_modules`)
+- Re-initialisation des modules Divi apres navigation Pjax
+- Re-initialisation des shortcodes v3 apres chaque navigation Pjax
 
 ## Compatibilite
 
@@ -141,3 +207,4 @@ Automatique sur toutes les pages quand active dans les reglages. Pas besoin de s
 - Responsive : Desktop, Tablette, Mobile
 - Streaming : Icecast MP3 / OGG
 - MediaSession API (controles systeme, casque bluetooth)
+- Backend : FastAPI (RadioManager)

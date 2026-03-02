@@ -1,6 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════════
-   Radio Audace Player v2  —  CSS
+   Radio Audace Player v3  —  CSS
    5 Skins + 3 Types Flottants + Animations + Responsive
+   v3: Alert Banner, Now Playing, Schedule, Team
    Compatible Divi / Extra Theme
    ═══════════════════════════════════════════════════════════════════ */
 
@@ -742,4 +743,378 @@ body:not(.rap-navigating) #content-area {
 }
 .rap-skin--brand .rap-player__btn--play {
     background-color: rgba(255,255,255,0.2) !important;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   v3: BANDEAU D'ALERTE
+   ═══════════════════════════════════════════════════════════════════ */
+
+.rap-alert-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 999998;
+    font-family: var(--rap-font);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 10px 24px;
+    font-size: 14px;
+    transform: translateY(-100%);
+    opacity: 0;
+    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
+}
+
+.rap-alert-banner.is-visible {
+    transform: translateY(0);
+    opacity: 1;
+}
+
+/* Types */
+.rap-alert-banner--info {
+    background: linear-gradient(135deg, #2563eb, #3b82f6);
+    color: #ffffff;
+}
+.rap-alert-banner--warning {
+    background: linear-gradient(135deg, #d97706, #f59e0b);
+    color: #ffffff;
+}
+.rap-alert-banner--urgent {
+    background: linear-gradient(135deg, #dc2626, #ef4444);
+    color: #ffffff;
+    animation: rap-alert-pulse 2s ease-in-out infinite;
+}
+
+@keyframes rap-alert-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.85; }
+}
+
+.rap-alert-banner__content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    justify-content: center;
+    min-width: 0;
+}
+
+.rap-alert-banner__title {
+    font-weight: 700;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.rap-alert-banner__message {
+    opacity: 0.9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rap-alert-banner__link {
+    color: #ffffff;
+    text-decoration: underline;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.rap-alert-banner__link:hover { opacity: 0.8; }
+
+.rap-alert-banner__close {
+    background: none !important;
+    border: none !important;
+    color: #ffffff;
+    font-size: 24px;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+    padding: 0 4px;
+    line-height: 1;
+    outline: none !important;
+    box-shadow: none !important;
+    flex-shrink: 0;
+}
+.rap-alert-banner__close:hover { opacity: 1; }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   v3: NOW PLAYING — Carte emission en cours
+   ═══════════════════════════════════════════════════════════════════ */
+
+#rap-now-playing {
+    font-family: var(--rap-font);
+    margin: 20px 0;
+}
+
+.rap-np__card {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: #ffffff;
+    border-radius: var(--rap-radius);
+    padding: 20px 24px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.rap-np__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.rap-np__live-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #ef4444;
+    animation: rap-pulse 1.5s ease-in-out infinite;
+}
+
+.rap-np__live-text {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #ef4444;
+}
+
+.rap-np__title {
+    font-size: 22px;
+    font-weight: 700;
+    margin: 0 0 4px;
+    line-height: 1.3;
+}
+
+.rap-np__presenter {
+    font-size: 14px;
+    color: var(--rap-primary);
+    font-weight: 500;
+    margin: 0 0 10px;
+}
+
+.rap-np__segment {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 8px;
+}
+.rap-np__segment-label {
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.rap-np__next {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 10px;
+    margin-top: 10px;
+}
+.rap-np__next strong { color: rgba(255, 255, 255, 0.8); }
+
+.rap-np__empty {
+    text-align: center;
+    color: #6b7280;
+    font-size: 14px;
+    padding: 20px;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   v3: GRILLE DES PROGRAMMES
+   ═══════════════════════════════════════════════════════════════════ */
+
+#rap-schedule {
+    font-family: var(--rap-font);
+    margin: 20px 0;
+}
+
+.rap-schedule__grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+}
+
+.rap-schedule__day {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 12px;
+    min-height: 120px;
+}
+
+.rap-schedule__day-name {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: capitalize;
+    color: #1a1a2e;
+    margin: 0 0 10px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--rap-primary);
+}
+
+.rap-schedule__show {
+    padding: 8px;
+    border-radius: 8px;
+    margin-bottom: 6px;
+    background: #f9fafb;
+    border-left: 3px solid transparent;
+    transition: background 0.2s, border-color 0.2s;
+}
+
+.rap-schedule__show.is-live {
+    background: rgba(46, 163, 242, 0.08);
+    border-left-color: var(--rap-primary);
+    box-shadow: 0 0 0 1px rgba(46, 163, 242, 0.15);
+}
+
+.rap-schedule__time {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--rap-primary);
+    margin-bottom: 2px;
+}
+
+.rap-schedule__title {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #1a1a2e;
+    line-height: 1.3;
+}
+
+.rap-schedule__presenter {
+    display: block;
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 2px;
+}
+
+.rap-schedule__no-show {
+    color: #9ca3af;
+    font-size: 12px;
+    text-align: center;
+    padding: 16px 0;
+    margin: 0;
+}
+
+.rap-schedule__empty {
+    text-align: center;
+    color: #6b7280;
+    font-size: 14px;
+    padding: 20px;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   v3: FICHES ANIMATEURS
+   ═══════════════════════════════════════════════════════════════════ */
+
+#rap-team {
+    font-family: var(--rap-font);
+    margin: 20px 0;
+}
+
+.rap-team__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 20px;
+}
+
+.rap-team__card {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    padding: 24px;
+    text-align: center;
+    transition: box-shadow 0.2s, transform 0.2s;
+}
+
+.rap-team__card:hover {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
+}
+
+.rap-team__photo {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin: 0 auto 12px;
+    display: block;
+    border: 3px solid var(--rap-primary);
+}
+
+.rap-team__photo--placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--rap-primary), #1a6fc7);
+    color: #ffffff;
+    font-size: 28px;
+    font-weight: 700;
+}
+
+.rap-team__name {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1a1a2e;
+    margin: 0 0 6px;
+}
+
+.rap-team__bio {
+    font-size: 13px;
+    color: #6b7280;
+    line-height: 1.5;
+    margin: 0;
+}
+
+.rap-team__empty {
+    text-align: center;
+    color: #6b7280;
+    font-size: 14px;
+    padding: 20px;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   v3: RESPONSIVE — Modules additionnels
+   ═══════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+    /* Grille -> 2 colonnes */
+    .rap-schedule__grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    /* Alerte */
+    .rap-alert-banner {
+        font-size: 12px;
+        padding: 8px 16px;
+    }
+    .rap-alert-banner__content {
+        flex-direction: column;
+        gap: 4px;
+        text-align: center;
+    }
+
+    /* Now playing */
+    .rap-np__title { font-size: 18px; }
+}
+
+@media (max-width: 480px) {
+    /* Grille -> 1 colonne liste empilee */
+    .rap-schedule__grid {
+        grid-template-columns: 1fr;
+    }
+
+    /* Team -> 2 colonnes */
+    .rap-team__grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+    }
+    .rap-team__card { padding: 16px; }
+    .rap-team__photo { width: 60px; height: 60px; }
 }

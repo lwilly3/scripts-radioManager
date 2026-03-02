@@ -3,7 +3,7 @@
  * Plugin Name: Radio Audace Player
  * Plugin URI:  https://www.radioaudace.com
  * Description: Lecteur audio streaming personnalise pour Radio Audace 106.8 FM. Shortcode, widget, lecteur flottant avec skins multiples et lecture persistante entre les pages. Compatible Divi/Extra.
- * Version:     2.0.0
+ * Version:     3.0.0
  * Author:      Radio Audace
  * Author URI:  https://www.radioaudace.com
  * License:     GPL-2.0+
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'RAP_VERSION', '2.0.0' );
+define( 'RAP_VERSION', '3.0.0' );
 define( 'RAP_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'RAP_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
@@ -47,6 +47,14 @@ function rap_get_defaults() {
 
         'show_volume'         => true,
         'auto_play'           => false,
+
+        // Integration API RadioManager (v3)
+        'api_url'                => 'https://api.radio.audace.ovh',
+        'api_polling_interval'   => 60,
+        'show_now_playing'       => true,
+        'show_alert_banner'      => true,
+        'analytics_enabled'      => true,
+        'wp_sync_secret'         => '',
     );
 }
 
@@ -99,6 +107,13 @@ function rap_enqueue_assets() {
         'showVolume'         => (bool) $options['show_volume'],
         'autoPlay'           => (bool) $options['auto_play'],
         'siteUrl'            => home_url(),
+        // Integration API v3
+        'ajaxUrl'            => admin_url( 'admin-ajax.php' ),
+        'pollingInterval'    => intval( $options['api_polling_interval'] ) * 1000,
+        'showNowPlaying'     => (bool) $options['show_now_playing'],
+        'showAlertBanner'    => (bool) $options['show_alert_banner'],
+        'analyticsEnabled'   => (bool) $options['analytics_enabled'],
+        'nonce'              => wp_create_nonce( 'rap_nonce' ),
     ) );
 
     $color = sanitize_hex_color( $options['primary_color'] );
@@ -117,8 +132,238 @@ function rap_enqueue_assets() {
 add_action( 'wp_enqueue_scripts', 'rap_enqueue_assets' );
 
 /* ═══════════════════════════════════════════════════════════════════
-   HTML HELPERS — fragments reutilisables
+   AJAX HANDLERS — Proxy vers l'API RadioManager (v3)
    ═══════════════════════════════════════════════════════════════════ */
+
+function rap_api_request( $endpoint ) {
+    $options = rap_get_options();
+    $api_url = rtrim( $options['api_url'], '/' );
+    $cache_key = 'rap_' . md5( $endpoint );
+    $cached = get_transient( $cache_key );
+    if ( false !== $cached ) {
+        return $cached;
+    }
+    $response = wp_remote_get( $api_url . $endpoint, array( 'timeout' => 10 ) );
+    if ( is_wp_error( $response ) ) {
+        return null;
+    }
+    $body = json_decode( wp_remote_retrieve_body( $response ), true );
+    set_transient( $cache_key, $body, 30 );
+    return $body;
+}
+
+function rap_ajax_now_playing() {
+    check_ajax_referer( 'rap_nonce', 'nonce' );
+    $data = rap_api_request( '/public/now-playing' );
+    if ( null === $data ) {
+        wp_send_json_error( 'API injoignable' );
+    }
+    wp_send_json( $data );
+}
+add_action( 'wp_ajax_rap_now_playing', 'rap_ajax_now_playing' );
+add_action( 'wp_ajax_nopriv_rap_now_playing', 'rap_ajax_now_playing' );
+
+function rap_ajax_schedule() {
+    check_ajax_referer( 'rap_nonce', 'nonce' );
+    $week = isset( $_GET['week'] ) ? sanitize_text_field( $_GET['week'] ) : 'current';
+    $data = rap_api_request( '/public/schedule?week=' . urlencode( $week ) );
+    if ( null === $data ) {
+        wp_send_json_error( 'API injoignable' );
+    }
+    wp_send_json( $data );
+}
+add_action( 'wp_ajax_rap_schedule', 'rap_ajax_schedule' );
+add_action( 'wp_ajax_nopriv_rap_schedule', 'rap_ajax_schedule' );
+
+function rap_ajax_alert() {
+    check_ajax_referer( 'rap_nonce', 'nonce' );
+    $data = rap_api_request( '/public/alert' );
+    if ( null === $data ) {
+        wp_send_json_error( 'API injoignable' );
+    }
+    wp_send_json( $data );
+}
+add_action( 'wp_ajax_rap_alert', 'rap_ajax_alert' );
+add_action( 'wp_ajax_nopriv_rap_alert', 'rap_ajax_alert' );
+
+function rap_ajax_presenters() {
+    check_ajax_referer( 'rap_nonce', 'nonce' );
+    $data = rap_api_request( '/public/presenters' );
+    if ( null === $data ) {
+        wp_send_json_error( 'API injoignable' );
+    }
+    wp_send_json( $data );
+}
+add_action( 'wp_ajax_rap_presenters', 'rap_ajax_presenters' );
+add_action( 'wp_ajax_nopriv_rap_presenters', 'rap_ajax_presenters' );
+
+function rap_ajax_analytics() {
+    check_ajax_referer( 'rap_nonce', 'nonce' );
+    $options = rap_get_options();
+    if ( ! $options['analytics_enabled'] ) {
+        wp_send_json_error( 'Analytics desactive' );
+    }
+    $api_url = rtrim( $options['api_url'], '/' );
+    $body = json_encode( array(
+        'session_id' => sanitize_text_field( $_POST['session_id'] ?? '' ),
+        'event_type' => sanitize_text_field( $_POST['event_type'] ?? '' ),
+        'duration'   => intval( $_POST['duration'] ?? 0 ),
+        'page_url'   => esc_url_raw( $_POST['page_url'] ?? '' ),
+    ) );
+    $response = wp_remote_post( $api_url . '/public/analytics/listen-event', array(
+        'timeout' => 5,
+        'headers' => array( 'Content-Type' => 'application/json' ),
+        'body'    => $body,
+    ) );
+    if ( is_wp_error( $response ) ) {
+        wp_send_json_error( 'Echec envoi' );
+    }
+    wp_send_json( json_decode( wp_remote_retrieve_body( $response ), true ) );
+}
+add_action( 'wp_ajax_rap_analytics', 'rap_ajax_analytics' );
+add_action( 'wp_ajax_nopriv_rap_analytics', 'rap_ajax_analytics' );
+
+/* ═══════════════════════════════════════════════════════════════════
+   NOUVEAUX SHORTCODES v3
+   ═══════════════════════════════════════════════════════════════════ */
+
+/**
+ * [radio_audace_programme] — Affiche l'emission en cours et la prochaine.
+ */
+function rap_programme_shortcode( $atts ) {
+    $options = rap_get_options();
+    $skin = ! empty( $atts['skin'] ) ? $atts['skin'] : $options['skin'];
+    ob_start();
+    ?>
+    <div id="rap-now-playing" class="rap-now-playing rap-skin--<?php echo esc_attr( $skin ); ?>"
+         data-rap-now-playing>
+        <div class="rap-now-playing__loading"><?php esc_html_e( 'Chargement du programme...', 'radio-audace-player' ); ?></div>
+    </div>
+    <?php
+    return ob_get_clean();
+}
+add_shortcode( 'radio_audace_programme', 'rap_programme_shortcode' );
+
+/**
+ * [radio_audace_grille] — Grille des programmes de la semaine.
+ */
+function rap_grille_shortcode( $atts ) {
+    $options = rap_get_options();
+    $skin = ! empty( $atts['skin'] ) ? $atts['skin'] : $options['skin'];
+    ob_start();
+    ?>
+    <div id="rap-schedule" class="rap-schedule rap-skin--<?php echo esc_attr( $skin ); ?>"
+         data-rap-schedule>
+        <div class="rap-schedule__loading"><?php esc_html_e( 'Chargement de la grille...', 'radio-audace-player' ); ?></div>
+    </div>
+    <?php
+    return ob_get_clean();
+}
+add_shortcode( 'radio_audace_grille', 'rap_grille_shortcode' );
+
+/**
+ * [radio_audace_equipe] — Fiches des animateurs.
+ */
+function rap_equipe_shortcode( $atts ) {
+    $options = rap_get_options();
+    $skin = ! empty( $atts['skin'] ) ? $atts['skin'] : $options['skin'];
+    ob_start();
+    ?>
+    <div id="rap-team" class="rap-team rap-skin--<?php echo esc_attr( $skin ); ?>"
+         data-rap-team>
+        <div class="rap-team__loading"><?php esc_html_e( 'Chargement de l\'equipe...', 'radio-audace-player' ); ?></div>
+    </div>
+    <?php
+    return ob_get_clean();
+}
+add_shortcode( 'radio_audace_equipe', 'rap_equipe_shortcode' );
+
+/* ═══════════════════════════════════════════════════════════════════
+   BANDEAU D'ALERTE — injecte via wp_footer avant le lecteur flottant
+   ═══════════════════════════════════════════════════════════════════ */
+
+function rap_render_alert_banner() {
+    if ( is_admin() ) {
+        return;
+    }
+    $options = rap_get_options();
+    if ( ! $options['show_alert_banner'] ) {
+        return;
+    }
+    ?>
+    <div id="rap-alert-banner" class="rap-alert-banner" style="display:none;"
+         role="alert" data-rap-alert></div>
+    <?php
+}
+add_action( 'wp_footer', 'rap_render_alert_banner', 98 );
+
+/* ═══════════════════════════════════════════════════════════════════
+   REST API — Endpoint de synchronisation cross-posting (P5)
+   ═══════════════════════════════════════════════════════════════════ */
+
+function rap_register_rest_routes() {
+    register_rest_route( 'rap/v1', '/sync-show', array(
+        'methods'             => 'POST',
+        'callback'            => 'rap_sync_show_callback',
+        'permission_callback' => 'rap_verify_sync_secret',
+    ) );
+}
+add_action( 'rest_api_init', 'rap_register_rest_routes' );
+
+function rap_verify_sync_secret( $request ) {
+    $options = rap_get_options();
+    $secret  = $request->get_header( 'X-RAP-Sync-Secret' );
+    return ! empty( $options['wp_sync_secret'] ) && hash_equals( $options['wp_sync_secret'], (string) $secret );
+}
+
+function rap_sync_show_callback( $request ) {
+    $data = $request->get_json_params();
+    if ( empty( $data['title'] ) ) {
+        return new WP_Error( 'missing_title', 'Le titre est requis', array( 'status' => 400 ) );
+    }
+
+    $show_id = intval( $data['id'] ?? 0 );
+    $existing = null;
+    if ( $show_id ) {
+        $existing_posts = get_posts( array(
+            'post_type'  => 'post',
+            'meta_key'   => '_rap_show_id',
+            'meta_value' => $show_id,
+            'numberposts' => 1,
+        ) );
+        if ( ! empty( $existing_posts ) ) {
+            $existing = $existing_posts[0];
+        }
+    }
+
+    $content  = wp_kses_post( $data['description'] ?? '' );
+    $content .= "\n\n[radio_audace_player]";
+    if ( ! empty( $data['presenter_name'] ) ) {
+        $content .= "\n\n<p><strong>Animateur :</strong> " . esc_html( $data['presenter_name'] ) . "</p>";
+    }
+
+    $post_data = array(
+        'post_title'   => sanitize_text_field( $data['title'] ),
+        'post_content' => $content,
+        'post_status'  => 'publish',
+        'post_type'    => 'post',
+        'meta_input'   => array(
+            '_rap_show_id'        => $show_id,
+            '_rap_broadcast_date' => sanitize_text_field( $data['broadcast_date'] ?? '' ),
+            '_rap_duration'       => intval( $data['duration'] ?? 0 ),
+        ),
+    );
+
+    if ( $existing ) {
+        $post_data['ID'] = $existing->ID;
+        wp_update_post( $post_data );
+        $post_id = $existing->ID;
+    } else {
+        $post_id = wp_insert_post( $post_data );
+    }
+
+    return rest_ensure_response( array( 'post_id' => $post_id, 'updated' => ! is_null( $existing ) ) );
+}
 
 /**
  * Icones SVG partagees.
