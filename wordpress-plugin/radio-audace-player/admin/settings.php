@@ -324,7 +324,7 @@ function rap_settings_page() {
                     <tr>
                         <th scope="row"><label for="rap_wp_sync_secret"><?php esc_html_e( 'Cle secrete de synchronisation', 'radio-audace-player' ); ?></label></th>
                         <td>
-                            <input type="text" id="rap_wp_sync_secret" name="rap_options[wp_sync_secret]" value="<?php echo esc_attr( $options['wp_sync_secret'] ); ?>" class="regular-text" placeholder="<?php esc_attr_e( 'ex: mon-secret-de-sync-2024', 'radio-audace-player' ); ?>">
+                            <input type="password" id="rap_wp_sync_secret" name="rap_options[wp_sync_secret]" value="<?php echo esc_attr( $options['wp_sync_secret'] ); ?>" class="regular-text" autocomplete="off" placeholder="<?php esc_attr_e( 'ex: mon-secret-de-sync-2024', 'radio-audace-player' ); ?>">
                             <p class="description"><?php esc_html_e( 'Cle partagee entre ce plugin et le backend. Quand une emission passe "en cours", le backend peut creer automatiquement un article WordPress (cross-posting). Cette cle doit etre identique a la variable WORDPRESS_SYNC_SECRET du backend. Laissez vide pour desactiver le cross-posting.', 'radio-audace-player' ); ?></p>
                         </td>
                     </tr>
