@@ -511,6 +511,63 @@ Les contributions sont les bienvenues ! Veuillez :
 
 ---
 
+## 🔌 Plugin WordPress — Radio Audace Player
+
+### Vue d'ensemble
+
+Le dossier `wordpress-plugin/radio-audace-player/` contient un plugin WordPress auto-mis-à-jour
+via les GitHub Releases de ce repo. Le fichier `admin/updater.php` (classe `RAP_GitHub_Updater`)
+interroge l'API GitHub et intègre le système de MAJ natif de WordPress.
+
+### Processus de release (résumé)
+
+> **Documentation complète** : voir `wordpress-plugin/radio-audace-player/RELEASE-PROCESS.md`
+
+Pour publier une nouvelle version du plugin :
+
+1. **Modifier le code** du plugin
+2. **Incrémenter la version** en 2 endroits dans `radio-audace-player.php` :
+   - En-tête : `* Version: X.Y.Z`
+   - Constante : `define('RAP_VERSION', 'X.Y.Z')`
+3. **Mettre à jour `CHANGELOG.md`** (racine du repo)
+4. **Commit** : `git commit -m "feat(plugin): description (vX.Y.Z)"`
+5. **Tag** : `git tag -a vX.Y.Z -m "description"`
+6. **Push** : `git push origin main --tags`
+7. **Créer une GitHub Release** (via API curl ou interface web) sur le tag `vX.Y.Z`
+8. **Générer le ZIP** : `cd wordpress-plugin && zip -r ../radio-audace-player.zip radio-audace-player/`
+9. **Attacher le ZIP** comme asset de la release (nom **exact** : `radio-audace-player.zip`)
+10. **Nettoyer** : `rm radio-audace-player.zip`
+
+### Points critiques
+
+| Règle | Pourquoi |
+|---|---|
+| L'asset ZIP doit s'appeler `radio-audace-player.zip` | L'updater PHP cherche ce nom exact |
+| Le ZIP doit avoir `radio-audace-player/` comme racine | WordPress attend cette structure |
+| La release ne doit PAS être un draft | L'API `/releases/latest` ignore les drafts |
+| Les 2 numéros de version doivent être identiques | En-tête WP + constante `RAP_VERSION` |
+| Le tag Git doit commencer par `v` | Convention (ex: `v3.2.0`) |
+
+### Fichiers du plugin
+
+```
+wordpress-plugin/radio-audace-player/
+├── radio-audace-player.php    # Fichier principal (shortcodes, widget, AJAX, REST)
+├── admin/
+│   ├── settings.php           # Page d'administration WP
+│   └── updater.php            # Auto-update via GitHub Releases
+├── css/
+│   └── radio-audace-player.css
+├── js/
+│   └── radio-audace-player.js
+├── assets/
+│   └── default-logo.svg
+├── LISEZMOI.md                # Documentation utilisateur
+└── RELEASE-PROCESS.md         # Guide complet du processus de release
+```
+
+---
+
 **Version de ce guide** : 1.0  
 **Dernière mise à jour** : 8 décembre 2025  
 **Compatibilité** : Tous les scripts du repository scripts-radioManager
