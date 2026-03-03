@@ -578,6 +578,25 @@
             var segmentText = show.current_segment
                 ? '<div class="rap-np__segment"><span class="rap-np__segment-label">En cours :</span> ' + escapeHtml(show.current_segment.title) + '</div>'
                 : '';
+
+            // Piste RadioDJ en cours
+            var trackHtml = '';
+            if (data.current_track && data.current_track.title) {
+                var trackArtist = data.current_track.artist
+                    ? escapeHtml(data.current_track.artist) : '';
+                var trackTitle = escapeHtml(data.current_track.title);
+                trackHtml =
+                    '<div class="rap-np__track">' +
+                        '<div class="rap-np__track-icon">' +
+                            '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>' +
+                        '</div>' +
+                        '<div class="rap-np__track-info">' +
+                            (trackArtist ? '<span class="rap-np__track-artist">' + trackArtist + '</span>' : '') +
+                            '<span class="rap-np__track-title">' + trackTitle + '</span>' +
+                        '</div>' +
+                    '</div>';
+            }
+
             var nextHtml = '';
             if (data.next_show) {
                 nextHtml = '<div class="rap-np__next">Prochaine : <strong>' + escapeHtml(data.next_show.title) + '</strong></div>';
@@ -591,6 +610,7 @@
                     '<h3 class="rap-np__title">' + escapeHtml(show.title) + '</h3>' +
                     (presenterName ? '<p class="rap-np__presenter">' + escapeHtml(presenterName) + '</p>' : '') +
                     segmentText +
+                    trackHtml +
                     nextHtml +
                 '</div>';
         });
@@ -601,13 +621,34 @@
             floatingName.textContent = data.current_show.title;
         }
 
+        // Mettre a jour le tagline du lecteur flottant avec la piste
+        var floatingTagline = document.querySelector('.rap-floating .rap-player__tagline');
+        if (floatingTagline && data && data.current_track && data.current_track.title) {
+            var tagText = data.current_track.title;
+            if (data.current_track.artist) {
+                tagText = data.current_track.artist + ' \u2014 ' + tagText;
+            }
+            floatingTagline.textContent = tagText;
+        }
+
         // Mettre a jour MediaSession
         if ('mediaSession' in navigator && data && data.current_show) {
+            var msArtist = (data.current_show.presenters && data.current_show.presenters.length > 0)
+                ? data.current_show.presenters[0].name
+                : (config.stationName || 'Radio Audace');
+            var msTitle = data.current_show.title;
+
+            // Si piste RadioDJ disponible, l'utiliser pour MediaSession (lockscreen mobile)
+            if (data.current_track && data.current_track.title) {
+                msTitle = data.current_track.title;
+                if (data.current_track.artist) {
+                    msArtist = data.current_track.artist;
+                }
+            }
+
             navigator.mediaSession.metadata = new MediaMetadata({
-                title: data.current_show.title,
-                artist: (data.current_show.presenters && data.current_show.presenters.length > 0)
-                    ? data.current_show.presenters[0].name
-                    : (config.stationName || 'Radio Audace'),
+                title: msTitle,
+                artist: msArtist,
                 album: config.stationName || 'Radio Audace 106.8 FM'
             });
         }

@@ -913,6 +913,53 @@ body:not(.rap-navigating) #content-area {
 }
 .rap-np__next strong { color: rgba(255, 255, 255, 0.8); }
 
+/* ── Track RadioDJ (inside Now Playing card) ──── */
+.rap-np__track {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin: 10px 0;
+}
+
+.rap-np__track-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(46, 163, 242, 0.15);
+    color: var(--rap-primary);
+    flex-shrink: 0;
+}
+
+.rap-np__track-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.rap-np__track-artist {
+    font-size: 12px;
+    color: var(--rap-primary);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rap-np__track-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.95);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .rap-np__empty {
     text-align: center;
     color: #6b7280;
@@ -1102,6 +1149,7 @@ body:not(.rap-navigating) #content-area {
 
     /* Now playing */
     .rap-np__title { font-size: 18px; }
+    .rap-np__track-title { font-size: 13px; }
 }
 
 @media (max-width: 480px) {
