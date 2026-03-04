@@ -15,7 +15,7 @@
     var audio = null;
     var isPlaying = false;
     var isStopping = false;  // flag pour ignorer les events pendant l'arret
-    var currentVolume = 0.8;
+    var currentVolume = (config.defaultVolume !== undefined) ? config.defaultVolume / 100 : 0.8;
     var pjaxEnabled = config.persistentPlayback !== false;
     var analyticsSessionId = null;
     var heartbeatTimer = null;
@@ -216,7 +216,9 @@
         // Mettre a jour le label de la bulle si present
         var bubbleLabel = player.querySelector('.rap-bubble__label span');
         if (bubbleLabel) {
-            bubbleLabel.textContent = state === 'playing' ? 'EN DIRECT' : 'Ecouter en direct';
+            bubbleLabel.textContent = state === 'playing'
+                ? (config.liveBadgeText || 'EN DIRECT')
+                : (config.bubbleLabelText || 'Ecouter en direct');
         }
     }
 
@@ -564,6 +566,16 @@
             .catch(function () {});
     }
 
+    function resolveArtist(artist) {
+        var unknowns = ['unknown artist', 'unknown', 'artiste inconnu', ''];
+        var raw = (artist || '').trim();
+        if (unknowns.indexOf(raw.toLowerCase()) === -1) return raw; // artiste valide
+        var mode = config.unknownArtistMode || 'hide';
+        if (mode === 'show') return raw || null;
+        if (mode === 'replace' && config.unknownArtistText) return config.unknownArtistText;
+        return null; // hide
+    }
+
     function renderNowPlaying(data) {
         // Mettre a jour les shortcodes [radio_audace_programme]
         var containers = document.querySelectorAll('#rap-now-playing');
@@ -581,9 +593,8 @@
 
             // Piste RadioDJ en cours
             var trackHtml = '';
-            if (data.current_track && data.current_track.title) {
-                var trackArtist = data.current_track.artist
-                    ? escapeHtml(data.current_track.artist) : '';
+            if (config.showTrackInfo !== false && data.current_track && data.current_track.title) {
+                var trackArtist = resolveArtist(data.current_track.artist);
                 var trackTitle = escapeHtml(data.current_track.title);
                 trackHtml =
                     '<div class="rap-np__track">' +
@@ -591,7 +602,7 @@
                             '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>' +
                         '</div>' +
                         '<div class="rap-np__track-info">' +
-                            (trackArtist ? '<span class="rap-np__track-artist">' + trackArtist + '</span>' : '') +
+                            (trackArtist ? '<span class="rap-np__track-artist">' + escapeHtml(trackArtist) + '</span>' : '') +
                             '<span class="rap-np__track-title">' + trackTitle + '</span>' +
                         '</div>' +
                     '</div>';
@@ -623,12 +634,33 @@
 
         // Mettre a jour le tagline du lecteur flottant avec la piste
         var floatingTagline = document.querySelector('.rap-floating .rap-player__tagline');
-        if (floatingTagline && data && data.current_track && data.current_track.title) {
-            var tagText = data.current_track.title;
-            if (data.current_track.artist) {
-                tagText = data.current_track.artist + ' \u2014 ' + tagText;
+        if (floatingTagline) {
+            if (config.showTrackInfo !== false && data && data.current_track && data.current_track.title) {
+                var tagArtist = resolveArtist(data.current_track.artist);
+                var tagText = data.current_track.title;
+                if (tagArtist) {
+                    tagText = tagArtist + ' \u2014 ' + tagText;
+                }
+                floatingTagline.textContent = tagText;
+
+                // Marquee si le texte deborde
+                requestAnimationFrame(function() {
+                    if (floatingTagline.scrollWidth > floatingTagline.clientWidth) {
+                        floatingTagline.classList.add('is-marquee');
+                        floatingTagline.innerHTML =
+                            '<span class="rap-marquee__inner">' +
+                            escapeHtml(tagText) + '\u00A0\u00A0\u00A0\u2022\u00A0\u00A0\u00A0' +
+                            escapeHtml(tagText) + '\u00A0\u00A0\u00A0\u2022\u00A0\u00A0\u00A0' +
+                            '</span>';
+                    } else {
+                        floatingTagline.classList.remove('is-marquee');
+                    }
+                });
+            } else {
+                // Pas de piste : revenir au slogan
+                floatingTagline.classList.remove('is-marquee');
+                floatingTagline.textContent = config.tagline || '';
             }
-            floatingTagline.textContent = tagText;
         }
 
         // Mettre a jour MediaSession
@@ -639,10 +671,11 @@
             var msTitle = data.current_show.title;
 
             // Si piste RadioDJ disponible, l'utiliser pour MediaSession (lockscreen mobile)
-            if (data.current_track && data.current_track.title) {
+            if (config.showTrackInfo !== false && data.current_track && data.current_track.title) {
                 msTitle = data.current_track.title;
-                if (data.current_track.artist) {
-                    msArtist = data.current_track.artist;
+                var msTrackArtist = resolveArtist(data.current_track.artist);
+                if (msTrackArtist) {
+                    msArtist = msTrackArtist;
                 }
             }
 
@@ -652,6 +685,30 @@
                 album: config.stationName || 'Radio Audace 106.8 FM'
             });
         }
+
+        // Mettre a jour les widget track containers
+        var widgetTrackEls = document.querySelectorAll('[data-rap-widget-track]');
+        widgetTrackEls.forEach(function (el) {
+            var playerEl = el.closest('[data-rap-player]');
+            if (!playerEl || playerEl.getAttribute('data-rap-show-track') !== '1') return;
+            if (!data || !data.current_track || !data.current_track.title ||
+                config.showTrackInfo === false) {
+                el.innerHTML = '';
+                el.style.display = 'none';
+                return;
+            }
+            var wTrackArtist = resolveArtist(data.current_track.artist);
+            var wTrackTitle = escapeHtml(data.current_track.title);
+            el.style.display = '';
+            el.innerHTML =
+                '<div class="rap-widget-track__icon">' +
+                    '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>' +
+                '</div>' +
+                '<div class="rap-widget-track__info">' +
+                    (wTrackArtist ? '<span class="rap-widget-track__artist">' + escapeHtml(wTrackArtist) + '</span>' : '') +
+                    '<span class="rap-widget-track__title">' + wTrackTitle + '</span>' +
+                '</div>';
+        });
     }
 
     /* ═══════════════════════════════════════════════════════════════

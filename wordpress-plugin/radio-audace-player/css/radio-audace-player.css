@@ -71,6 +71,23 @@
     text-overflow: ellipsis;
 }
 
+/* Marquee animation pour tagline longue */
+.rap-player__tagline.is-marquee {
+    text-overflow: clip;
+}
+.rap-marquee__inner {
+    display: inline-block;
+    animation: rap-marquee 15s linear infinite;
+    white-space: nowrap;
+}
+@keyframes rap-marquee {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+}
+.rap-player__tagline.is-marquee:hover .rap-marquee__inner {
+    animation-play-state: paused;
+}
+
 .rap-player__controls {
     display: flex;
     align-items: center;
@@ -1165,4 +1182,231 @@ body:not(.rap-navigating) #content-area {
     }
     .rap-team__card { padding: 16px; }
     .rap-team__photo { width: 60px; height: 60px; }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   v3: STYLE CARD — Widget / Sidebar premium
+   ═══════════════════════════════════════════════════════════════════ */
+
+.rap-player--card {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 14px;
+    max-width: 320px;
+    padding: 24px 20px;
+    border-radius: 24px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    transition: box-shadow var(--rap-transition), transform var(--rap-transition);
+}
+.rap-player--card:hover {
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+    transform: translateY(-2px);
+}
+
+.rap-player--card .rap-player__info {
+    flex-direction: column;
+    align-items: center;
+}
+.rap-player--card .rap-player__logo {
+    width: 72px;
+    height: 72px;
+}
+.rap-player--card .rap-player__text {
+    align-items: center;
+}
+.rap-player--card .rap-player__name {
+    font-size: 16px;
+}
+.rap-player--card .rap-player__controls {
+    margin-left: 0;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+.rap-player--card .rap-player__volume {
+    width: 100%;
+    justify-content: center;
+}
+.rap-player--card .rap-player__volume-slider {
+    width: 100px;
+}
+
+/* Widget title */
+.rap-player__widget-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.6;
+    margin-bottom: 4px;
+    width: 100%;
+}
+.rap-player--card .rap-player__widget-title {
+    text-align: center;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   v3: EQUALIZER — Barres animees
+   ═══════════════════════════════════════════════════════════════════ */
+
+.rap-player__equalizer {
+    display: none;
+    align-items: flex-end;
+    gap: 3px;
+    height: 20px;
+}
+
+/* Visible uniquement dans le style card */
+.rap-player--card .rap-player__equalizer {
+    display: flex;
+}
+
+.rap-player__eq-bar {
+    width: 4px;
+    border-radius: 2px;
+    background: var(--rap-primary);
+    height: 4px;
+    transition: height 0.2s ease;
+}
+
+/* Animation seulement quand en lecture */
+.is-playing .rap-player__eq-bar:nth-child(1) { animation: rap-eq-1 0.8s ease-in-out infinite; }
+.is-playing .rap-player__eq-bar:nth-child(2) { animation: rap-eq-2 0.7s ease-in-out infinite 0.1s; }
+.is-playing .rap-player__eq-bar:nth-child(3) { animation: rap-eq-3 0.9s ease-in-out infinite 0.2s; }
+.is-playing .rap-player__eq-bar:nth-child(4) { animation: rap-eq-4 0.75s ease-in-out infinite 0.05s; }
+
+@keyframes rap-eq-1 {
+    0%, 100% { height: 4px; }
+    50%      { height: 18px; }
+}
+@keyframes rap-eq-2 {
+    0%, 100% { height: 6px; }
+    50%      { height: 14px; }
+}
+@keyframes rap-eq-3 {
+    0%, 100% { height: 3px; }
+    50%      { height: 20px; }
+}
+@keyframes rap-eq-4 {
+    0%, 100% { height: 5px; }
+    50%      { height: 12px; }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   v3: WIDGET TRACK — Piste en cours dans le widget
+   ═══════════════════════════════════════════════════════════════════ */
+
+.rap-player__widget-track {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    padding: 8px 12px;
+    width: 100%;
+    animation: rap-track-fadein 0.4s ease;
+}
+.rap-player__widget-track:empty {
+    display: none;
+}
+
+@keyframes rap-track-fadein {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.rap-widget-track__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: rgba(46, 163, 242, 0.15);
+    color: var(--rap-primary);
+    flex-shrink: 0;
+}
+
+.rap-widget-track__info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.rap-widget-track__artist {
+    font-size: 10px;
+    color: var(--rap-primary);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rap-widget-track__title {
+    font-size: 12px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.95);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Skin light overrides pour widget track */
+.rap-skin--light .rap-player__widget-track {
+    background: rgba(0, 0, 0, 0.04);
+}
+.rap-skin--light .rap-widget-track__title {
+    color: #1a1a2e;
+}
+
+/* Skin brand overrides pour widget track */
+.rap-skin--brand .rap-player__widget-track {
+    background: rgba(255, 255, 255, 0.12);
+}
+.rap-skin--brand .rap-widget-track__artist {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* Skin neon overrides pour widget track */
+.rap-skin--neon .rap-player__widget-track {
+    background: rgba(46, 163, 242, 0.08);
+    border: 1px solid rgba(46, 163, 242, 0.2);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   v3: CARD STYLE — Compatibilite Divi sidebar
+   ═══════════════════════════════════════════════════════════════════ */
+
+.et_pb_widget .rap-player--card {
+    max-width: 100%;
+}
+.et_pb_widget .rap-player--card .rap-player__logo {
+    width: 64px;
+    height: 64px;
+}
+
+@media (max-width: 768px) {
+    .rap-player--card {
+        max-width: 280px;
+    }
+    .rap-player--card .rap-player__logo {
+        width: 60px;
+        height: 60px;
+    }
+}
+
+@media (max-width: 480px) {
+    .rap-player--card {
+        max-width: 100%;
+        border-radius: 16px;
+    }
+    .rap-player--card .rap-player__logo {
+        width: 56px;
+        height: 56px;
+    }
 }

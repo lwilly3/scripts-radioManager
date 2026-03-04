@@ -39,18 +39,19 @@ function rap_sanitize_options( $input ) {
 
     $sanitized['skin'] = in_array( $input['skin'], rap_valid_skins(), true ) ? $input['skin'] : 'dark';
 
-    $valid_styles              = array( 'bar', 'mini' );
+    $valid_styles              = array( 'bar', 'mini', 'card' );
     $sanitized['player_style'] = in_array( $input['player_style'], $valid_styles, true ) ? $input['player_style'] : 'bar';
 
     $sanitized['floating_enabled']    = ! empty( $input['floating_enabled'] );
     $sanitized['floating_type']       = in_array( $input['floating_type'], rap_valid_floating_types(), true ) ? $input['floating_type'] : 'bar-float';
-    $sanitized['floating_position']   = sanitize_text_field( $input['floating_position'] ?? 'bottom-center' );
-
+    $sanitized['live_badge_text']     = ! empty( $input['live_badge_text'] ) ? sanitize_text_field( $input['live_badge_text'] ) : 'EN DIRECT';
+    $sanitized['bubble_label_text']   = ! empty( $input['bubble_label_text'] ) ? sanitize_text_field( $input['bubble_label_text'] ) : 'Ecouter en direct';
     $sanitized['persistent_playback'] = ! empty( $input['persistent_playback'] );
     $sanitized['content_selector']    = sanitize_text_field( $input['content_selector'] ?? '' );
 
     $sanitized['show_volume'] = ! empty( $input['show_volume'] );
     $sanitized['auto_play']   = ! empty( $input['auto_play'] );
+    $sanitized['default_volume'] = max( 0, min( 100, intval( $input['default_volume'] ?? 80 ) ) );
 
     $sanitized['api_url']              = ! empty( $input['api_url'] ) ? esc_url_raw( $input['api_url'] ) : $defaults['api_url'];
     $sanitized['api_polling_interval'] = ! empty( $input['api_polling_interval'] ) ? intval( $input['api_polling_interval'] ) : $defaults['api_polling_interval'];
@@ -59,6 +60,12 @@ function rap_sanitize_options( $input ) {
     $sanitized['show_alert_banner']    = ! empty( $input['show_alert_banner'] );
     $sanitized['analytics_enabled']    = ! empty( $input['analytics_enabled'] );
     $sanitized['wp_sync_secret']       = ! empty( $input['wp_sync_secret'] ) ? sanitize_text_field( $input['wp_sync_secret'] ) : '';
+
+    $sanitized['show_track_info']     = ! empty( $input['show_track_info'] );
+    $valid_ua_modes = array( 'hide', 'replace', 'show' );
+    $sanitized['unknown_artist_mode'] = in_array( $input['unknown_artist_mode'] ?? '', $valid_ua_modes, true )
+        ? $input['unknown_artist_mode'] : 'hide';
+    $sanitized['unknown_artist_text'] = sanitize_text_field( $input['unknown_artist_text'] ?? '' );
 
     return $sanitized;
 }
@@ -208,6 +215,23 @@ function rap_settings_page() {
                     </label>
                     <?php endforeach; ?>
                 </div>
+
+                <table class="form-table" role="presentation" style="margin-top:12px;">
+                    <tr>
+                        <th scope="row"><label for="rap_live_badge_text"><?php esc_html_e( 'Texte du badge en direct', 'radio-audace-player' ); ?></label></th>
+                        <td>
+                            <input type="text" id="rap_live_badge_text" name="rap_options[live_badge_text]" value="<?php echo esc_attr( $options['live_badge_text'] ); ?>" class="regular-text" placeholder="EN DIRECT">
+                            <p class="description"><?php esc_html_e( 'Texte affiche dans le badge rouge du lecteur (ex: EN DIRECT, LIVE, A L\'ANTENNE).', 'radio-audace-player' ); ?></p>
+                        </td>
+                    </tr>
+                    <tr id="rap_bubble_label_text_row" style="<?php echo $options['floating_type'] === 'bubble' ? '' : 'display:none;'; ?>">
+                        <th scope="row"><label for="rap_bubble_label_text"><?php esc_html_e( 'Texte du label bulle', 'radio-audace-player' ); ?></label></th>
+                        <td>
+                            <input type="text" id="rap_bubble_label_text" name="rap_options[bubble_label_text]" value="<?php echo esc_attr( $options['bubble_label_text'] ); ?>" class="regular-text" placeholder="Ecouter en direct">
+                            <p class="description"><?php esc_html_e( 'Texte affiche a cote du bouton bulle avant ouverture.', 'radio-audace-player' ); ?></p>
+                        </td>
+                    </tr>
+                </table>
             </div>
 
             <!-- ═══ SECTION : LECTURE PERSISTANTE ═══ -->
@@ -244,6 +268,7 @@ function rap_settings_page() {
                             <select id="rap_player_style" name="rap_options[player_style]">
                                 <option value="bar" <?php selected( $options['player_style'], 'bar' ); ?>><?php esc_html_e( 'Barre (horizontal)', 'radio-audace-player' ); ?></option>
                                 <option value="mini" <?php selected( $options['player_style'], 'mini' ); ?>><?php esc_html_e( 'Mini (sidebar/widget)', 'radio-audace-player' ); ?></option>
+                                <option value="card" <?php selected( $options['player_style'], 'card' ); ?>><?php esc_html_e( 'Carte (sidebar premium)', 'radio-audace-player' ); ?></option>
                             </select>
                             <p class="description"><?php esc_html_e( 'Style par defaut du shortcode [radio_audace_player].', 'radio-audace-player' ); ?></p>
                         </td>
@@ -265,6 +290,51 @@ function rap_settings_page() {
                                 <?php esc_html_e( 'Lancer la lecture automatiquement', 'radio-audace-player' ); ?>
                             </label>
                             <p class="description"><?php esc_html_e( 'Note : la plupart des navigateurs bloquent la lecture automatique.', 'radio-audace-player' ); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="rap_default_volume"><?php esc_html_e( 'Volume par defaut', 'radio-audace-player' ); ?></label></th>
+                        <td>
+                            <input type="number" id="rap_default_volume" name="rap_options[default_volume]" value="<?php echo esc_attr( $options['default_volume'] ); ?>" class="small-text" min="0" max="100"> %
+                            <p class="description"><?php esc_html_e( 'Volume initial du lecteur au premier chargement (0 a 100).', 'radio-audace-player' ); ?></p>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- ═══ SECTION : PISTE RADIODJ ═══ -->
+            <div class="rap-section">
+                <h2><?php esc_html_e( 'Piste RadioDJ', 'radio-audace-player' ); ?></h2>
+                <p class="description" style="margin-bottom:16px;">
+                    <?php esc_html_e( 'Configurez le comportement lorsque RadioDJ envoie un artiste inconnu (ex: "Unknown Artist").', 'radio-audace-player' ); ?>
+                </p>
+                <table class="form-table" role="presentation">
+                    <tr>
+                        <th scope="row"><?php esc_html_e( 'Piste en cours', 'radio-audace-player' ); ?></th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="rap_options[show_track_info]" value="1" <?php checked( $options['show_track_info'] ); ?>>
+                                <?php esc_html_e( 'Afficher les informations de la piste RadioDJ en cours', 'radio-audace-player' ); ?>
+                            </label>
+                            <p class="description"><?php esc_html_e( 'Si active, le titre et l\'artiste du morceau diffuse par RadioDJ s\'affichent dans la carte Now Playing et dans le lecteur flottant.', 'radio-audace-player' ); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="rap_unknown_artist_mode"><?php esc_html_e( 'Artiste inconnu', 'radio-audace-player' ); ?></label></th>
+                        <td>
+                            <select id="rap_unknown_artist_mode" name="rap_options[unknown_artist_mode]">
+                                <option value="hide" <?php selected( $options['unknown_artist_mode'], 'hide' ); ?>><?php esc_html_e( 'Masquer (afficher uniquement le titre)', 'radio-audace-player' ); ?></option>
+                                <option value="replace" <?php selected( $options['unknown_artist_mode'], 'replace' ); ?>><?php esc_html_e( 'Remplacer par un texte personnalise', 'radio-audace-player' ); ?></option>
+                                <option value="show" <?php selected( $options['unknown_artist_mode'], 'show' ); ?>><?php esc_html_e( 'Afficher tel quel', 'radio-audace-player' ); ?></option>
+                            </select>
+                            <p class="description"><?php esc_html_e( 'Comportement quand l\'artiste est "Unknown Artist", "Unknown" ou vide.', 'radio-audace-player' ); ?></p>
+                        </td>
+                    </tr>
+                    <tr id="rap_unknown_artist_text_row" style="<?php echo $options['unknown_artist_mode'] === 'replace' ? '' : 'display:none;'; ?>">
+                        <th scope="row"><label for="rap_unknown_artist_text"><?php esc_html_e( 'Texte de remplacement', 'radio-audace-player' ); ?></label></th>
+                        <td>
+                            <input type="text" id="rap_unknown_artist_text" name="rap_options[unknown_artist_text]" value="<?php echo esc_attr( $options['unknown_artist_text'] ); ?>" class="regular-text" placeholder="<?php esc_attr_e( 'ex: Radio Audace', 'radio-audace-player' ); ?>">
+                            <p class="description"><?php esc_html_e( 'Ce texte remplacera "Unknown Artist" dans l\'affichage.', 'radio-audace-player' ); ?></p>
                         </td>
                     </tr>
                 </table>
@@ -355,7 +425,15 @@ function rap_settings_page() {
                         <td><strong>Avec style + skin</strong></td>
                         <td>
                             <code>[radio_audace_player style="bar" skin="neon"]</code><br>
-                            <code>[radio_audace_player style="mini" skin="glass"]</code>
+                            <code>[radio_audace_player style="mini" skin="glass"]</code><br>
+                            <code>[radio_audace_player style="card" skin="dark" show_track="1"]</code>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Carte avec options</strong></td>
+                        <td>
+                            <code>[radio_audace_player style="card" title="Ecouter" hide_volume="1" show_track="1"]</code><br>
+                            <code>[radio_audace_player style="card" custom_name="Ma Radio" custom_tagline="Le meilleur son"]</code>
                         </td>
                     </tr>
                     <tr>
@@ -407,6 +485,16 @@ function rap_settings_page() {
         $('.rap-admin-cards').on('change', 'input[type="radio"]', function() {
             $(this).closest('.rap-admin-cards').find('.rap-admin-card').removeClass('is-active');
             $(this).closest('.rap-admin-card').addClass('is-active');
+        });
+
+        // Toggle champ texte artiste inconnu
+        $('#rap_unknown_artist_mode').on('change', function() {
+            $('#rap_unknown_artist_text_row').toggle($(this).val() === 'replace');
+        });
+
+        // Toggle champ texte label bulle (visible seulement si type=bubble)
+        $('#rap-floating-cards').on('change', 'input[type="radio"]', function() {
+            $('#rap_bubble_label_text_row').toggle($(this).val() === 'bubble');
         });
 
         // Media uploader pour le logo
