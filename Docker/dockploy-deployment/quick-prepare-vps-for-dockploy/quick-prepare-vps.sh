@@ -1091,12 +1091,17 @@ echo "   /backup/postgres   — backups PostgreSQL"
 # pg_dumpall : exporte TOUTES les bases de donnees et les roles.
 # gzip : compresse le dump (un dump de quelques GB → quelques centaines de MB).
 #
-# IMPORTANT : le nom du container PostgreSQL depend de votre config Dokploy.
-# Adaptez "postgres" dans la commande docker exec si votre container
-# a un nom different (ex: "radiomanager-db-1").
+# CONFIGURATION RADIOMANAGER :
+# - Le container PostgreSQL s'appelle "audace_db" (defini dans docker-compose.yml)
+# - L'utilisateur PostgreSQL est "audace_user" (variable DB_USER du docker-compose)
+# - Le superuser "postgres" est aussi disponible pour pg_dumpall
+# - Le filtre "name=audace_db" cherche le container par son nom exact
+# - En fallback, "ancestor=postgres" cherche tout container base sur l'image postgres
+#
+# Si votre container a un nom different, modifiez la ligne ci-dessous.
 #
 # Pour restaurer un backup :
-#   gunzip < /backup/postgres/dump_20260313.sql.gz | docker exec -i <container> psql -U postgres
+#   gunzip < /backup/postgres/dump_20260313.sql.gz | docker exec -i audace_db psql -U postgres
 
 cat > /etc/cron.d/backup-postgres << 'CRON'
 # =============================================================================
@@ -1105,14 +1110,20 @@ cat > /etc/cron.d/backup-postgres << 'CRON'
 # Tous les jours a 3h du matin, on cree un dump complet de PostgreSQL.
 # Les backups de plus de 7 jours sont supprimes automatiquement.
 #
+# CONFIGURATION :
+# - Container : audace_db (nom defini dans docker-compose.yml du backend)
+# - Utilisateur dump : postgres (superuser, a acces a toutes les bases)
+# - Si le container a un nom different, adaptez "audace_db" ci-dessous
+#
 # FORMAT DU CRON : minute heure jour_mois mois jour_semaine utilisateur commande
 #
 # Pour lister les backups : ls -lh /backup/postgres/
-# Pour restaurer : gunzip < /backup/postgres/dump_YYYYMMDD.sql.gz | docker exec -i <container> psql -U postgres
+# Pour restaurer : gunzip < /backup/postgres/dump_YYYYMMDD.sql.gz | docker exec -i audace_db psql -U postgres
 # =============================================================================
 
 # Dump complet a 3h00 tous les jours
-0 3 * * * root docker exec -t $(docker ps -qf "ancestor=postgres" 2>/dev/null | head -1) pg_dumpall -U postgres 2>/dev/null | gzip > /backup/postgres/dump_$(date +\%Y\%m\%d).sql.gz 2>/dev/null || true
+# Essaie d'abord le container "audace_db", sinon cherche tout container postgres
+0 3 * * * root CONTAINER=$(docker ps -qf "name=audace_db" 2>/dev/null | head -1); [ -z "$CONTAINER" ] && CONTAINER=$(docker ps -qf "ancestor=postgres" 2>/dev/null | head -1); [ -n "$CONTAINER" ] && docker exec -t $CONTAINER pg_dumpall -U postgres 2>/dev/null | gzip > /backup/postgres/dump_$(date +\%Y\%m\%d).sql.gz 2>/dev/null || true
 
 # Nettoyage des vieux backups (> 7 jours) a 3h30
 30 3 * * * root find /backup/postgres -name "dump_*.sql.gz" -mtime +7 -delete 2>/dev/null || true
