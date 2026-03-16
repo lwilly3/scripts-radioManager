@@ -220,26 +220,30 @@ DONNEES NON PERSISTANTES (recreees a chaque deploy)
 
 ### Ce qui est configure par le script
 
-Le script `quick-prepare-vps.sh` v2.0 a installe un **cron job** qui fait :
+Le script `quick-prepare-vps.sh` v2.1 a installe un **cron job** qui fait :
 
 | Quand | Quoi | Ou | Retention |
 |-------|------|-----|-----------|
-| Chaque nuit a 3h00 | Dump complet PostgreSQL (compresse) | `/backup/postgres/dump_YYYYMMDD.sql.gz` | 7 jours |
+| Chaque nuit a 3h00 | Dump de la base audace_db (compresse) | `/backup/postgres/dump_YYYYMMDD.sql.gz` | 7 jours |
 | Chaque nuit a 3h30 | Suppression des backups > 7 jours | `/backup/postgres/` | — |
 
 **Comment ca marche** :
 
 ```
 3h00 — Le cron lance cette commande :
-  docker exec postgres → pg_dumpall → gzip → /backup/postgres/dump_20260313.sql.gz
+  docker exec postgres → pg_dump --clean --if-exists audace_db → gzip → /backup/postgres/dump_20260313.sql.gz
 
 3h30 — Le cron lance cette commande :
   find /backup/postgres/ -mtime +7 -delete → supprime les fichiers > 7 jours
 ```
 
-`pg_dumpall` exporte TOUTES les bases de donnees, TOUS les roles (utilisateurs
-PostgreSQL), et TOUTES les permissions. C'est un export **complet** qui permet
-de reconstruire exactement la meme base de donnees sur un autre serveur.
+`pg_dump --clean --if-exists` exporte la base `audace_db` avec des instructions
+`DROP TABLE IF EXISTS` avant chaque `CREATE TABLE`. Le fichier resultant est
+directement compatible avec `psql -d audace_db` pour la restauration.
+
+> **Note** : on utilise `pg_dump` (une seule base) et non `pg_dumpall` (cluster entier).
+> `pg_dump` est plus adapte car on ne restaure qu'une seule base, et l'option `--clean`
+> garantit que les anciennes tables sont supprimees avant d'etre recreees.
 
 Le fichier gzip resultant fait generalement entre 1-10 MB (selon la taille
 de votre base). Sept jours de backups = ~70 MB maximum.
@@ -294,7 +298,7 @@ docker ps | grep postgres
 # a1b2c3d4e5f6   postgres:15-alpine   ...   audace_db
 
 # Lancer le dump (remplacez le nom du container si different)
-docker exec -t audace_db pg_dumpall -U postgres | \
+docker exec -t audace_db pg_dump --clean --if-exists -U postgres audace_db | \
   gzip > /backup/postgres/dump_manuel_$(date +%Y%m%d_%H%M%S).sql.gz
 
 # Verifier
@@ -303,7 +307,7 @@ ls -lh /backup/postgres/dump_manuel_*
 
 > **Explication de la commande** :
 > - `docker exec -t audace_db` : execute une commande dans le container PostgreSQL
-> - `pg_dumpall -U postgres` : exporte toutes les bases en tant qu'utilisateur postgres
+> - `pg_dump --clean --if-exists -U postgres audace_db` : exporte la base audace_db avec DROP TABLE avant chaque CREATE TABLE
 > - `|` (pipe) : envoie la sortie vers la commande suivante
 > - `gzip > /backup/postgres/dump_manuel_...` : compresse et enregistre le fichier
 > - `$(date +%Y%m%d_%H%M%S)` : ajoute la date et l'heure au nom du fichier
@@ -353,13 +357,13 @@ ls -lh /backup/postgres/
 
 # 3. (RECOMMANDE) Faites un backup de l'etat actuel AVANT de restaurer
 #    Au cas ou vous changeriez d'avis
-docker exec -t audace_db pg_dumpall -U postgres | \
+docker exec -t audace_db pg_dump --clean --if-exists -U postgres audace_db | \
   gzip > /backup/postgres/dump_avant_restauration_$(date +%Y%m%d_%H%M%S).sql.gz
 
 # 4. Restaurer le backup choisi
 #    Cette commande decompresse le dump et l'injecte dans PostgreSQL
 gunzip < /backup/postgres/dump_20260315.sql.gz | \
-  docker exec -i audace_db psql -U postgres
+  docker exec -i audace_db psql -U audace_user -d audace_db
 
 # 5. Verifier que les donnees sont la
 docker exec -it audace_db psql -U postgres -c "\l"
@@ -378,9 +382,8 @@ docker restart audace_api
 > - `docker exec -i audace_db` : execute dans le container (`-i` = envoie du stdin)
 > - `psql -U postgres` : client PostgreSQL, execute les commandes SQL recues
 >
-> **ATTENTION** : `pg_dumpall` restaure en **ecrasant** les donnees existantes.
-> Les roles et bases de donnees sont recrees. Si un role existe deja,
-> vous verrez des erreurs "role already exists" — c'est normal et sans danger.
+> **ATTENTION** : la restauration **ecrase** les donnees existantes.
+> Le backend (Alembic) recree automatiquement les tables manquantes au redemarrage.
 
 ### Scenario B : Reconstruire un serveur complet depuis zero
 
@@ -492,21 +495,23 @@ ssh dokploy@IP_NOUVEAU_VPS
 docker ps | grep audace_db
 # Attendu : audace_db   postgres:15-alpine   ... Up ...
 
-# Restaurer le backup
+# Restaurer le backup (nettoie d'abord les donnees existantes)
+docker exec -i audace_db psql -U audace_user -d audace_db \
+  -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
 gunzip < /tmp/dump_20260316.sql.gz | \
-  docker exec -i audace_db psql -U postgres
+  docker exec -i audace_db psql -U audace_user -d audace_db
 
 # Verifier la restauration
-docker exec -it audace_db psql -U postgres -c "\l"
-# Vous devriez voir votre base de donnees (audace_db)
+docker exec -it audace_db psql -U audace_user -d audace_db -c "\dt"
+# Vous devriez voir les tables (users, emissions, etc.)
 
-docker exec -it audace_db psql -U postgres -d audace_db -c "SELECT count(*) FROM users;"
+docker exec -it audace_db psql -U audace_user -d audace_db -c "SELECT count(*) FROM users;"
 # Vous devriez voir le nombre d'utilisateurs (pas 0)
 ```
 
-> **Messages "role already exists"** ou **"database already exists"** :
-> c'est normal ! Le `pg_dumpall` essaie de creer les roles et bases
-> qui existent peut-etre deja. PostgreSQL les ignore et continue.
+> **Note** : le `DROP SCHEMA public CASCADE` supprime toutes les tables avant de restaurer.
+> Cela evite les conflits de cles primaires et garantit une restauration propre.
+> Alembic remettra a jour le schema automatiquement au redemarrage du backend.
 
 #### Etape B.6 — Redemarrer le backend pour qu'il prenne en compte les donnees
 
@@ -577,7 +582,7 @@ au debut : faire un backup **frais** depuis l'ancien serveur.
 
 ```bash
 # 1. Sur l'ANCIEN VPS — backup frais
-docker exec -t audace_db pg_dumpall -U postgres | \
+docker exec -t audace_db pg_dump --clean --if-exists -U audace_user audace_db | \
   gzip > /backup/postgres/dump_migration_$(date +%Y%m%d_%H%M%S).sql.gz
 
 # 2. Telecharger sur votre Mac
@@ -608,7 +613,7 @@ de PostgreSQL, ou toute operation qui modifie la structure de la base.
 
 ```bash
 # 1. Backup complet
-docker exec -t audace_db pg_dumpall -U postgres | \
+docker exec -t audace_db pg_dump --clean --if-exists -U audace_user audace_db | \
   gzip > /backup/postgres/dump_avant_operation_$(date +%Y%m%d_%H%M%S).sql.gz
 
 # 2. Verifier que le backup est valide
@@ -620,8 +625,11 @@ gunzip -t /backup/postgres/dump_avant_operation_*.sql.gz
 # ...
 
 # 4. Si ca se passe mal → restaurer
+docker exec -i audace_db psql -U audace_user -d audace_db \
+  -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
 gunzip < /backup/postgres/dump_avant_operation_YYYYMMDD_HHMMSS.sql.gz | \
-  docker exec -i audace_db psql -U postgres
+  docker exec -i audace_db psql -U audace_user -d audace_db
+docker restart audace_api
 ```
 
 ### Procedure 2 : Restaurer une table supprimee par erreur
@@ -665,15 +673,17 @@ ls -lh /backup/postgres/
 # Identifier le dump d'hier (ex: dump_20260315.sql.gz)
 
 # 2. (Optionnel) Sauvegarder l'etat actuel avant de restaurer
-docker exec -t audace_db pg_dumpall -U postgres | \
+docker exec -t audace_db pg_dump --clean --if-exists -U audace_user audace_db | \
   gzip > /backup/postgres/dump_etat_actuel_$(date +%Y%m%d_%H%M%S).sql.gz
 
 # 3. Arreter le backend
 docker stop audace_api
 
-# 4. Restaurer le backup d'hier
+# 4. Restaurer le backup d'hier (nettoyer d'abord)
+docker exec -i audace_db psql -U audace_user -d audace_db \
+  -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
 gunzip < /backup/postgres/dump_20260315.sql.gz | \
-  docker exec -i audace_db psql -U postgres
+  docker exec -i audace_db psql -U audace_user -d audace_db
 
 # 5. Redemarrer le backend
 docker start audace_api
@@ -792,7 +802,7 @@ docker ps | grep postgres
 
 # Tester le backup manuellement
 docker exec -t $(docker ps -qf "ancestor=postgres" | head -1) \
-  pg_dumpall -U postgres | gzip > /backup/postgres/test.sql.gz
+  pg_dump --clean --if-exists -U audace_user audace_db | gzip > /backup/postgres/test.sql.gz
 
 # Si erreur "Error: No such container" :
 # Le container n'est pas base sur l'image "postgres".
@@ -805,7 +815,7 @@ docker ps --format "{{.Names}} ({{.Image}})"
 
 ```bash
 # Le dump a echoue. Testez manuellement et regardez l'erreur :
-docker exec -t audace_db pg_dumpall -U postgres 2>&1 | head -20
+docker exec -t audace_db pg_dump --clean --if-exists -U audace_user audace_db 2>&1 | head -20
 
 # Erreur courante : "FATAL: role 'postgres' does not exist"
 # → L'utilisateur PostgreSQL s'appelle autrement.
@@ -816,9 +826,9 @@ docker exec -it audace_db psql -U audace_user -c "\du"
 
 ### "ERROR: database already exists" pendant la restauration
 
-C'est **normal** et **sans danger**. `pg_dumpall` tente de creer la base,
-mais elle existe deja. PostgreSQL affiche l'erreur et continue.
-Les donnees sont quand meme restaurees.
+Ce message peut apparaitre si vous restaurez un ancien dump `pg_dumpall`.
+Avec les nouveaux dumps `pg_dump --clean --if-exists`, ce probleme ne se produit plus.
+Si vous le voyez, c'est sans danger — les donnees sont quand meme restaurees.
 
 ### "FATAL: Peer authentication failed"
 
@@ -854,8 +864,8 @@ df -h
 |-------|------------------|
 | **Volume Docker** | Espace de stockage sur le vrai disque, branche dans un container. Les donnees survivent a la destruction du container. |
 | **Container** | Boite isolee qui contient une application (PostgreSQL, FastAPI, etc.). Ephemere — peut etre detruit et recree. |
-| **pg_dumpall** | Commande PostgreSQL qui exporte TOUTE la base en commandes SQL. C'est le format de backup le plus complet. |
-| **pg_dump** | Comme pg_dumpall mais pour UNE seule base. Moins complet (ne sauvegarde pas les roles). |
+| **pg_dump** | Commande PostgreSQL qui exporte UNE base en commandes SQL. Avec `--clean --if-exists`, le dump inclut les instructions de nettoyage. |
+| **pg_dumpall** | Variante qui exporte TOUTES les bases + roles. Moins adapte pour une restauration ciblee (risque de doublons dans `alembic_version`). |
 | **psql** | Client en ligne de commande pour PostgreSQL. Permet d'executer des requetes SQL. |
 | **gzip / gunzip** | Compression / decompression de fichiers. Reduit la taille du dump de 5-10x. |
 | **scp** | Secure Copy — copie de fichiers entre votre Mac et le serveur via SSH. |
@@ -876,7 +886,7 @@ ARCHITECTURE DES DONNEES RADIOMANAGER
 
 PostgreSQL (volume Docker) ← DONNEES PRINCIPALS
   Backup automatique : /backup/postgres/dump_YYYYMMDD.sql.gz (7 jours)
-  Backup manuel : docker exec -t audace_db pg_dumpall -U postgres | gzip > fichier.sql.gz
+  Backup manuel : docker exec -t audace_db pg_dump --clean --if-exists -U audace_user audace_db | gzip > fichier.sql.gz
 
 Firebase (cloud Google) ← DONNEES SECONDAIRES
   Firestore : citations, inventaire, settings
@@ -886,7 +896,9 @@ Firebase (cloud Google) ← DONNEES SECONDAIRES
 
 RESTAURER SUR LE MEME SERVEUR
 ==============================
-gunzip < /backup/postgres/dump_YYYYMMDD.sql.gz | docker exec -i audace_db psql -U postgres
+docker exec -i audace_db psql -U audace_user -d audace_db -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+gunzip < /backup/postgres/dump_YYYYMMDD.sql.gz | docker exec -i audace_db psql -U audace_user -d audace_db
+docker restart audace_api
 
 
 RECONSTRUIRE UN SERVEUR DEPUIS ZERO
@@ -909,5 +921,5 @@ Telecharger un backup sur votre Mac chaque semaine :
 
 ---
 
-*Derniere mise a jour : 2026-03-16 — Script quick-prepare-vps.sh v2.0*
+*Derniere mise a jour : 2026-03-16 — Script quick-prepare-vps.sh v2.1*
 *Projet RadioManager*
