@@ -2,12 +2,13 @@
 
 # =============================================================================
 #
-#  SCRIPT DE PREPARATION VPS POUR DOKPLOY — v2.0
+#  SCRIPT DE PREPARATION VPS — v3.0
 #
 #  Description :
 #    Ce script prepare un VPS vierge (Ubuntu/Debian) pour heberger des
-#    applications via Dokploy. Il securise le serveur, configure le pare-feu,
-#    installe les outils necessaires et optimise le systeme pour Docker.
+#    applications (avec ou sans Dokploy). Il securise le serveur, configure
+#    le pare-feu, installe les outils necessaires, optimise le systeme pour
+#    Docker et installe des outils de maintenance personnalises.
 #
 #  Contexte :
 #    Concu pour le projet RadioManager (backend FastAPI + frontend React),
@@ -34,7 +35,7 @@
 #    SSH_PUBKEY  — Cle publique SSH a installer (optionnel, tres recommande)
 #    SWAP_SIZE   — Taille du fichier swap (defaut: "2G")
 #
-#  Ce que fait ce script (12 etapes) :
+#  Ce que fait ce script (15 etapes) :
 #    1. Mise a jour du systeme (apt update + upgrade)
 #    2. Installation des outils essentiels (curl, git, htop, etc.)
 #    3. Configuration du fuseau horaire
@@ -47,6 +48,9 @@
 #   10. Activation des mises a jour de securite automatiques
 #   11. Optimisations kernel pour Docker (sysctl, limites fichiers)
 #   12. Creation des repertoires et configuration des backups
+#   13. Installation des commandes de maintenance (pgadmin, vps-help)
+#   14. Configuration de la banniere SSH (MOTD)
+#   15. Installation de Dokploy (optionnel)
 #
 #  Prerequis :
 #    - Ubuntu 20.04+ ou Debian 11+
@@ -64,8 +68,8 @@
 #    - Protection anti-spoofing reseau
 #
 #  Auteur : RadioManager Team
-#  Version : 2.0
-#  Derniere modification : 2026-03-13
+#  Version : 3.0
+#  Derniere modification : 2026-03-17
 #  Ancien script sauvegarde dans : bakup-script/quick-prepare-vps.v1.sh
 #
 # =============================================================================
@@ -119,7 +123,7 @@ trap 'echo ""; echo "ERREUR a la ligne $LINENO. Consultez le log : $LOG_FILE"; e
 # a jour le total quand on ajoute une etape), on utilise un compteur.
 
 CURRENT_STEP=0
-TOTAL_STEPS=12
+TOTAL_STEPS=15
 
 # Fonction utilitaire : affiche l'en-tete d'une etape
 # Usage : step "Description de l'etape"
@@ -184,13 +188,16 @@ SWAP_SIZE=${SWAP_SIZE:-"2G"}
 # Variable interne pour gerer le choix interactif du port SSH
 CHANGE_SSH_PORT="n"
 
+# Variable interne pour l'installation de Dokploy (choix interactif)
+INSTALL_DOKPLOY="n"
+
 
 # =============================================================================
 # BANNIERE ET CONFIGURATION INTERACTIVE
 # =============================================================================
 
 echo "=========================================="
-echo "  Preparation VPS pour Dokploy v2.0"
+echo "  Preparation VPS v3.0"
 echo "=========================================="
 echo ""
 echo "Configuration actuelle :"
@@ -226,6 +233,16 @@ else
     echo "   Port SSH par defaut conserve : $SSH_PORT"
 fi
 
+# --- Choix interactif de l'installation Dokploy ---
+echo ""
+read -p "Voulez-vous installer Dokploy a la fin de la preparation ? [y/N] " -n 1 -r INSTALL_DOKPLOY
+echo ""
+if [[ $INSTALL_DOKPLOY =~ ^[Yy]$ ]]; then
+    echo "   Dokploy sera installe a la derniere etape"
+else
+    echo "   Dokploy ne sera pas installe (installation manuelle possible apres)"
+fi
+
 # --- Confirmation avant execution ---
 # Derniere chance pour l'utilisateur d'annuler avant les modifications.
 echo ""
@@ -248,6 +265,13 @@ echo "  [9]  Creer un fichier swap de $SWAP_SIZE"
 echo "  [10] Activer les mises a jour de securite automatiques"
 echo "  [11] Optimiser le kernel pour Docker"
 echo "  [12] Creer les repertoires et configurer les backups"
+echo "  [13] Installer les commandes de maintenance (pgadmin, vps-help)"
+echo "  [14] Configurer la banniere SSH (status au login)"
+if [[ $INSTALL_DOKPLOY =~ ^[Yy]$ ]]; then
+    echo "  [15] Installer Dokploy"
+else
+    echo "  [15] Dokploy : non (installation manuelle possible)"
+fi
 echo ""
 read -p "Continuer avec cette configuration ? [y/N] " -n 1 -r
 echo ""
@@ -1142,6 +1166,469 @@ echo "Backup PostgreSQL quotidien configure (3h00, retention 7 jours)"
 
 
 # =============================================================================
+# ETAPE 13 : INSTALLATION DES COMMANDES DE MAINTENANCE
+# =============================================================================
+# On installe des commandes personnalisees dans /usr/local/bin/ pour
+# simplifier la maintenance du VPS au quotidien.
+#
+# Commandes installees :
+# - pgadmin  : ouvre/ferme l'acces distant PostgreSQL (port 5432)
+# - vps-help : affiche l'aide detaillee des commandes de maintenance
+
+step "Installation des commandes de maintenance"
+
+# --- Commande pgadmin ---
+# Gere l'acces temporaire a PostgreSQL via pgAdmin depuis l'exterieur.
+# Agit sur UFW + DOCKER-USER (iptables) pour ouvrir/fermer le port 5432.
+
+cat > /usr/local/bin/pgadmin << 'PGADMIN_EOF'
+#!/bin/bash
+# =============================================================================
+#  pgadmin — Acces temporaire PostgreSQL via pgAdmin 4
+#
+#  Usage :
+#    sudo pgadmin enable          # Ouvre l'acces pour ton IP SSH
+#    sudo pgadmin enable 1.2.3.4  # Ouvre pour une IP specifique
+#    sudo pgadmin disable         # Ferme tous les acces
+#    sudo pgadmin status          # Affiche l'etat actuel
+# =============================================================================
+
+set -e
+
+PORT=5432
+COMMENT="pgAdmin-temp"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+if [ "$EUID" -ne 0 ]; then
+    echo -e "${RED}Cette commande doit etre executee avec sudo${NC}"
+    echo "  sudo pgadmin $*"
+    exit 1
+fi
+
+detect_ip() {
+    if [ -n "$SSH_CLIENT" ]; then
+        echo "$SSH_CLIENT" | awk '{print $1}'
+        return
+    fi
+    if [ -n "$SSH_CONNECTION" ]; then
+        echo "$SSH_CONNECTION" | awk '{print $1}'
+        return
+    fi
+    local ip
+    ip=$(who -m 2>/dev/null | grep -oP '\d+\.\d+\.\d+\.\d+' | head -1)
+    if [ -n "$ip" ]; then
+        echo "$ip"
+        return
+    fi
+    ip=$(last -i -1 2>/dev/null | head -1 | awk '{print $3}' | grep -oP '\d+\.\d+\.\d+\.\d+')
+    if [ -n "$ip" ]; then
+        echo "$ip"
+        return
+    fi
+    echo ""
+}
+
+enable_access() {
+    local ip="$1"
+    [ -z "$ip" ] && ip=$(detect_ip)
+
+    if [ -z "$ip" ]; then
+        echo -e "${RED}Impossible de detecter ton IP automatiquement.${NC}"
+        echo "  Trouve ton IP : curl -s ifconfig.me"
+        echo "  Puis relance  : sudo pgadmin enable TON_IP"
+        exit 1
+    fi
+
+    echo -e "${YELLOW}=== Ouverture acces PostgreSQL ===${NC}"
+    echo -e "IP autorisee : ${GREEN}$ip${NC}"
+    echo ""
+
+    ufw allow from "$ip" to any port $PORT proto tcp comment "$COMMENT" 2>/dev/null
+    echo -e "${GREEN}[OK]${NC} UFW : port $PORT ouvert pour $ip"
+
+    if iptables -C DOCKER-USER -p tcp --dport $PORT -s "$ip" -j RETURN 2>/dev/null; then
+        echo -e "${GREEN}[OK]${NC} DOCKER-USER : regle deja presente"
+    else
+        iptables -I DOCKER-USER 1 -p tcp --dport $PORT -s "$ip" -j RETURN
+        echo -e "${GREEN}[OK]${NC} DOCKER-USER : regle ajoutee"
+    fi
+
+    echo ""
+    echo -e "${GREEN}Acces pgAdmin active !${NC}"
+    echo ""
+    echo "Connexion pgAdmin 4 :"
+    echo "  Host     : $(hostname -I | awk '{print $1}')"
+    echo "  Port     : $PORT"
+    echo "  Database : audace_db"
+    echo "  Username : audace_user"
+    echo ""
+    echo -e "${YELLOW}N'oublie pas de fermer apres :${NC}  sudo pgadmin disable"
+}
+
+disable_access() {
+    echo -e "${YELLOW}=== Fermeture acces PostgreSQL ===${NC}"
+    echo ""
+
+    local count=0
+    while ufw status numbered | grep -q "$COMMENT"; do
+        local rule_num
+        rule_num=$(ufw status numbered | grep "$COMMENT" | head -1 | grep -oP '^\[\s*\K\d+')
+        if [ -n "$rule_num" ]; then
+            echo "y" | ufw delete "$rule_num" > /dev/null 2>&1
+            count=$((count + 1))
+        else
+            break
+        fi
+    done
+    echo -e "${GREEN}[OK]${NC} UFW : $count regle(s) supprimee(s)"
+
+    local iptables_count=0
+    while iptables -L DOCKER-USER -n --line-numbers 2>/dev/null | grep -q "dpt:$PORT"; do
+        local line_num
+        line_num=$(iptables -L DOCKER-USER -n --line-numbers | grep "dpt:$PORT" | head -1 | awk '{print $1}')
+        if [ -n "$line_num" ]; then
+            iptables -D DOCKER-USER "$line_num"
+            iptables_count=$((iptables_count + 1))
+        else
+            break
+        fi
+    done
+    echo -e "${GREEN}[OK]${NC} DOCKER-USER : $iptables_count regle(s) supprimee(s)"
+    echo ""
+    echo -e "${GREEN}Acces pgAdmin desactive. Port $PORT ferme.${NC}"
+}
+
+show_status() {
+    echo -e "${YELLOW}=== Statut acces PostgreSQL (port $PORT) ===${NC}"
+    echo ""
+
+    echo "--- UFW ---"
+    local ufw_rules
+    ufw_rules=$(ufw status | grep "$PORT" || true)
+    if [ -n "$ufw_rules" ]; then
+        echo -e "${RED}OUVERT${NC} — Regles trouvees :"
+        echo "$ufw_rules" | sed 's/^/  /'
+    else
+        echo -e "${GREEN}FERME${NC} — Aucune regle UFW sur le port $PORT"
+    fi
+
+    echo ""
+    echo "--- DOCKER-USER (iptables) ---"
+    local docker_rules
+    docker_rules=$(iptables -L DOCKER-USER -n 2>/dev/null | grep "dpt:$PORT" || true)
+    if [ -n "$docker_rules" ]; then
+        echo -e "${RED}OUVERT${NC} — Regles trouvees :"
+        echo "$docker_rules" | sed 's/^/  /'
+    else
+        echo -e "${GREEN}FERME${NC} — Aucune regle DOCKER-USER sur le port $PORT"
+    fi
+
+    echo ""
+    if [ -n "$ufw_rules" ] || [ -n "$docker_rules" ]; then
+        echo -e "Resultat : ${RED}PostgreSQL est accessible depuis l'exterieur${NC}"
+        echo "Pour fermer : sudo pgadmin disable"
+    else
+        echo -e "Resultat : ${GREEN}PostgreSQL est protege (acces interne uniquement)${NC}"
+    fi
+}
+
+case "${1:-}" in
+    enable)  enable_access "${2:-}" ;;
+    disable) disable_access ;;
+    status)  show_status ;;
+    *)
+        echo "Usage : sudo pgadmin {enable|disable|status} [IP]"
+        echo ""
+        echo "  enable          Ouvre le port 5432 pour ton IP (auto-detectee)"
+        echo "  enable 1.2.3.4  Ouvre le port 5432 pour l'IP specifiee"
+        echo "  disable         Ferme tous les acces pgAdmin"
+        echo "  status          Affiche l'etat actuel"
+        exit 1
+        ;;
+esac
+PGADMIN_EOF
+
+chmod +x /usr/local/bin/pgadmin
+echo "Commande 'pgadmin' installee (sudo pgadmin enable/disable/status)"
+
+# --- Commande vps-help ---
+# Aide detaillee sur toutes les commandes de maintenance disponibles.
+
+cat > /usr/local/bin/vps-help << 'VPSHELP_EOF'
+#!/bin/bash
+# =============================================================================
+#  vps-help — Aide maintenance VPS RadioManager
+# =============================================================================
+
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+echo ""
+echo -e "${BOLD}=========================================="
+echo -e "  AIDE MAINTENANCE VPS — RadioManager"
+echo -e "==========================================${NC}"
+
+echo ""
+echo -e "${YELLOW}--- COMMANDES PERSONNALISEES ---${NC}"
+echo ""
+echo -e "  ${GREEN}sudo pgadmin enable${NC}          Ouvre l'acces PostgreSQL pour ton IP"
+echo -e "  ${GREEN}sudo pgadmin enable 1.2.3.4${NC}  Ouvre pour une IP specifique"
+echo -e "  ${GREEN}sudo pgadmin disable${NC}         Ferme l'acces PostgreSQL"
+echo -e "  ${GREEN}sudo pgadmin status${NC}          Etat de l'acces PostgreSQL"
+echo -e "  ${GREEN}vps-help${NC}                     Affiche cette aide"
+
+echo ""
+echo -e "${YELLOW}--- DOCKER ---${NC}"
+echo ""
+echo -e "  ${GREEN}docker ps${NC}                    Liste les containers actifs"
+echo -e "  ${GREEN}docker ps -a${NC}                 Liste tous les containers (actifs + arretes)"
+echo -e "  ${GREEN}docker logs <container>${NC}       Voir les logs d'un container"
+echo -e "  ${GREEN}docker logs --tail 50 -f <c>${NC} Suivre les 50 derniers logs en temps reel"
+echo -e "  ${GREEN}docker restart <container>${NC}    Redemarrer un container"
+echo -e "  ${GREEN}docker stats${NC}                 Usage CPU/RAM/reseau en temps reel"
+echo -e "  ${GREEN}docker system df${NC}             Espace disque utilise par Docker"
+echo -e "  ${GREEN}docker system prune -f${NC}       Nettoyer images/containers inutilises"
+
+echo ""
+echo -e "${YELLOW}--- CONTAINERS RADIOMANAGER ---${NC}"
+echo ""
+echo -e "  ${GREEN}docker logs audace_api --tail 50${NC}     Logs du backend FastAPI"
+echo -e "  ${GREEN}docker logs audace_db --tail 50${NC}      Logs PostgreSQL"
+echo -e "  ${GREEN}docker restart audace_api${NC}            Redemarrer l'API"
+echo -e "  ${GREEN}docker exec -it audace_api bash${NC}      Shell dans le container API"
+echo -e "  ${GREEN}docker exec -it audace_db psql -U audace_user -d audace_db${NC}"
+echo "                                        Console PostgreSQL"
+
+echo ""
+echo -e "${YELLOW}--- BASE DE DONNEES ---${NC}"
+echo ""
+echo -e "  ${GREEN}docker exec -it audace_db psql -U audace_user -d audace_db${NC}"
+echo "      Ouvre la console PostgreSQL"
+echo ""
+echo -e "  ${CYAN}Commandes SQL utiles une fois connecte :${NC}"
+echo -e "    ${GREEN}\\dt${NC}                          Liste les tables"
+echo -e "    ${GREEN}\\du${NC}                          Liste les roles/utilisateurs"
+echo -e "    ${GREEN}SELECT version();${NC}             Version PostgreSQL"
+echo -e "    ${GREEN}\\q${NC}                           Quitter"
+echo ""
+echo -e "  ${CYAN}Backup manuel :${NC}"
+echo -e "    ${GREEN}docker exec -t audace_db pg_dump --clean --if-exists -U postgres audace_db | gzip > /backup/postgres/dump_manuel.sql.gz${NC}"
+echo ""
+echo -e "  ${CYAN}Restaurer un backup :${NC}"
+echo -e "    ${GREEN}gunzip < /backup/postgres/dump_YYYYMMDD.sql.gz | docker exec -i audace_db psql -U audace_user -d audace_db${NC}"
+
+echo ""
+echo -e "${YELLOW}--- ALEMBIC (MIGRATIONS) ---${NC}"
+echo ""
+echo -e "  ${GREEN}docker exec -it audace_api alembic current${NC}"
+echo "      Version actuelle de la migration"
+echo -e "  ${GREEN}docker exec -it audace_api alembic history --verbose${NC}"
+echo "      Historique des migrations"
+echo -e "  ${GREEN}docker exec -it audace_api alembic revision --autogenerate -m \"description\"${NC}"
+echo "      Generer une migration (JAMAIS a la main !)"
+echo -e "  ${GREEN}docker exec -it audace_api alembic upgrade head${NC}"
+echo "      Appliquer les migrations en attente"
+
+echo ""
+echo -e "${YELLOW}--- SECURITE ---${NC}"
+echo ""
+echo -e "  ${GREEN}sudo ufw status verbose${NC}              Etat du pare-feu"
+echo -e "  ${GREEN}sudo ufw status numbered${NC}             Regles numerotees"
+echo -e "  ${GREEN}sudo fail2ban-client status${NC}          Jails actives"
+echo -e "  ${GREEN}sudo fail2ban-client status sshd${NC}     IPs bannies (SSH)"
+echo -e "  ${GREEN}sudo fail2ban-client set sshd unbanip 1.2.3.4${NC}"
+echo "      Debannir une IP"
+
+echo ""
+echo -e "${YELLOW}--- SYSTEME ---${NC}"
+echo ""
+echo -e "  ${GREEN}htop${NC}                         Moniteur de ressources (CPU, RAM)"
+echo -e "  ${GREEN}df -h${NC}                        Espace disque"
+echo -e "  ${GREEN}free -h${NC}                      Memoire + swap"
+echo -e "  ${GREEN}uptime${NC}                       Duree de fonctionnement"
+echo -e "  ${GREEN}ls -lh /backup/postgres/${NC}     Liste les backups"
+echo -e "  ${GREEN}sudo journalctl -u docker --since '1 hour ago'${NC}"
+echo "      Logs Docker systeme (derniere heure)"
+echo -e "  ${GREEN}sudo systemctl restart sshd${NC}  Redemarrer SSH"
+echo -e "  ${GREEN}sudo reboot${NC}                  Redemarrer le serveur"
+
+echo ""
+echo -e "${YELLOW}--- DOKPLOY ---${NC}"
+echo ""
+echo -e "  ${GREEN}Interface web${NC} : https://<IP>:3000"
+echo -e "  ${GREEN}docker ps -f name=dokploy${NC}    Verifier que Dokploy tourne"
+echo -e "  ${GREEN}docker logs dokploy --tail 50${NC} Logs Dokploy"
+
+echo ""
+echo -e "${YELLOW}--- NETTOYAGE ESPACE DISQUE ---${NC}"
+echo ""
+echo -e "  ${GREEN}docker system prune -f${NC}                Nettoyer Docker (images/containers)"
+echo -e "  ${GREEN}docker system prune -a -f${NC}             Nettoyer Docker (+ images non utilisees)"
+echo -e "  ${GREEN}sudo journalctl --vacuum-size=100M${NC}    Limiter les logs systeme a 100MB"
+echo -e "  ${GREEN}sudo apt autoremove -y${NC}                Supprimer les paquets orphelins"
+
+echo ""
+VPSHELP_EOF
+
+chmod +x /usr/local/bin/vps-help
+echo "Commande 'vps-help' installee (tapez vps-help pour l'aide complete)"
+
+
+# =============================================================================
+# ETAPE 14 : CONFIGURATION DE LA BANNIERE SSH (MOTD)
+# =============================================================================
+# Quand un utilisateur se connecte en SSH, un message d'accueil (MOTD)
+# s'affiche. On le personnalise pour afficher l'etat du VPS et les
+# commandes utiles.
+#
+# On desactive les scripts MOTD par defaut et on cree un script
+# personnalise qui affiche les infos pertinentes.
+
+step "Configuration de la banniere SSH (MOTD)"
+
+# Desactiver les MOTD par defaut (trop verbeux)
+chmod -x /etc/update-motd.d/* 2>/dev/null || true
+
+# Creer le script MOTD personnalise
+cat > /etc/update-motd.d/99-vps-status << 'MOTD_EOF'
+#!/bin/bash
+# =============================================================================
+#  Banniere SSH personnalisee — RadioManager VPS
+# =============================================================================
+
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+# --- Infos systeme ---
+HOSTNAME=$(hostname)
+IP=$(hostname -I | awk '{print $1}')
+UPTIME=$(uptime -p 2>/dev/null | sed 's/up //' || uptime | awk -F'( |,)' '{print $5}')
+LOAD=$(cat /proc/loadavg | awk '{print $1, $2, $3}')
+KERNEL=$(uname -r)
+
+# --- Memoire ---
+MEM_TOTAL=$(free -m | awk '/Mem:/{print $2}')
+MEM_USED=$(free -m | awk '/Mem:/{print $3}')
+MEM_PCT=$((MEM_USED * 100 / MEM_TOTAL))
+if [ $MEM_PCT -gt 80 ]; then
+    MEM_COLOR=$RED
+elif [ $MEM_PCT -gt 60 ]; then
+    MEM_COLOR=$YELLOW
+else
+    MEM_COLOR=$GREEN
+fi
+
+# --- Swap ---
+SWAP_TOTAL=$(free -m | awk '/Swap:/{print $2}')
+SWAP_USED=$(free -m | awk '/Swap:/{print $3}')
+if [ "$SWAP_TOTAL" -gt 0 ]; then
+    SWAP_PCT=$((SWAP_USED * 100 / SWAP_TOTAL))
+else
+    SWAP_PCT=0
+fi
+
+# --- Disque ---
+DISK_PCT=$(df -h / | awk 'NR==2{print $5}' | tr -d '%')
+DISK_AVAIL=$(df -h / | awk 'NR==2{print $4}')
+if [ "$DISK_PCT" -gt 80 ]; then
+    DISK_COLOR=$RED
+elif [ "$DISK_PCT" -gt 60 ]; then
+    DISK_COLOR=$YELLOW
+else
+    DISK_COLOR=$GREEN
+fi
+
+# --- Docker containers ---
+DOCKER_RUNNING=$(docker ps -q 2>/dev/null | wc -l)
+DOCKER_TOTAL=$(docker ps -aq 2>/dev/null | wc -l)
+
+# --- Fail2ban ---
+BANNED=$(sudo fail2ban-client status sshd 2>/dev/null | grep "Currently banned" | awk '{print $NF}')
+BANNED=${BANNED:-0}
+
+# --- Dernier backup ---
+LAST_BACKUP=$(ls -t /backup/postgres/dump_*.sql.gz 2>/dev/null | head -1)
+if [ -n "$LAST_BACKUP" ]; then
+    BACKUP_DATE=$(stat -c %y "$LAST_BACKUP" 2>/dev/null | cut -d' ' -f1)
+    BACKUP_SIZE=$(du -h "$LAST_BACKUP" 2>/dev/null | awk '{print $1}')
+    BACKUP_INFO="${BACKUP_DATE} (${BACKUP_SIZE})"
+else
+    BACKUP_INFO="Aucun"
+fi
+
+echo ""
+echo -e "${BOLD}==============================================${NC}"
+echo -e "${BOLD}  RadioManager VPS — $HOSTNAME${NC}"
+echo -e "${BOLD}==============================================${NC}"
+echo ""
+echo -e "  ${CYAN}IP${NC}          $IP"
+echo -e "  ${CYAN}Uptime${NC}      $UPTIME"
+echo -e "  ${CYAN}Kernel${NC}      $KERNEL"
+echo -e "  ${CYAN}Load${NC}        $LOAD"
+echo ""
+echo -e "  ${CYAN}RAM${NC}         ${MEM_COLOR}${MEM_USED}MB / ${MEM_TOTAL}MB (${MEM_PCT}%)${NC}"
+echo -e "  ${CYAN}Swap${NC}        ${SWAP_USED}MB / ${SWAP_TOTAL}MB (${SWAP_PCT}%)"
+echo -e "  ${CYAN}Disque${NC}      ${DISK_COLOR}${DISK_PCT}% utilise${NC} (${DISK_AVAIL} libre)"
+echo ""
+echo -e "  ${CYAN}Docker${NC}      ${GREEN}${DOCKER_RUNNING}${NC} container(s) actif(s) / ${DOCKER_TOTAL} total"
+
+# Liste des containers actifs
+if [ "$DOCKER_RUNNING" -gt 0 ]; then
+    docker ps --format "                  {{.Names}}  {{.Status}}" 2>/dev/null | head -8
+fi
+
+echo ""
+echo -e "  ${CYAN}Fail2ban${NC}    ${BANNED} IP(s) bannie(s)"
+echo -e "  ${CYAN}Backup${NC}      ${BACKUP_INFO}"
+echo ""
+echo -e "${DIM}  Tapez ${NC}${GREEN}vps-help${NC}${DIM} pour l'aide complete des commandes de maintenance${NC}"
+echo ""
+MOTD_EOF
+
+chmod +x /etc/update-motd.d/99-vps-status
+echo "Banniere SSH configuree (status VPS au login)"
+
+
+# =============================================================================
+# ETAPE 15 : INSTALLATION DE DOKPLOY (OPTIONNEL)
+# =============================================================================
+# Dokploy est une plateforme de deploiement (alternative a Heroku/Vercel)
+# qui s'auto-heberge sur le VPS. Elle installe et gere Docker automatiquement.
+#
+# L'installation est optionnelle : si l'utilisateur a choisi "non" a la
+# question interactive, cette etape est ignoree.
+
+step "Installation de Dokploy"
+
+if [[ $INSTALL_DOKPLOY =~ ^[Yy]$ ]]; then
+    echo "Installation de Dokploy en cours..."
+    echo "   (cela peut prendre quelques minutes)"
+    echo ""
+    # Dokploy s'installe avec un script officiel
+    # Il installe Docker si pas deja present et configure tout automatiquement
+    curl -sSL https://dokploy.com/install.sh | sh
+    echo ""
+    echo "Dokploy installe avec succes"
+    echo "   Interface : https://$(hostname -I | awk '{print $1}'):3000"
+else
+    echo "Installation Dokploy ignoree (choix utilisateur)"
+    echo "   Pour installer plus tard : curl -sSL https://dokploy.com/install.sh | sh"
+fi
+
+
+# =============================================================================
 # RESUME FINAL
 # =============================================================================
 
@@ -1177,6 +1664,16 @@ if [ -n "$SSH_PUBKEY" ]; then
     echo "   [x] Auth par cle SSH uniquement (mot de passe desactive)"
 else
     echo "   [ ] Auth par cle SSH (a configurer manuellement — voir ci-dessous)"
+fi
+echo ""
+echo "OUTILS INSTALLES :"
+echo "   [x] pgadmin   — acces temporaire PostgreSQL (sudo pgadmin enable/disable)"
+echo "   [x] vps-help  — aide complete maintenance (tapez vps-help)"
+echo "   [x] Banniere SSH — status VPS affiche a chaque connexion"
+if [[ $INSTALL_DOKPLOY =~ ^[Yy]$ ]]; then
+    echo "   [x] Dokploy installe (https://$(hostname -I | awk '{print $1}'):3000)"
+else
+    echo "   [ ] Dokploy non installe (curl -sSL https://dokploy.com/install.sh | sh)"
 fi
 echo ""
 
@@ -1225,11 +1722,12 @@ if [ -z "$SSH_PUBKEY" ]; then
     STEP_NUM=$((STEP_NUM + 1))
 fi
 
-echo "${STEP_NUM}. INSTALLER DOKPLOY"
-echo "   En tant qu'utilisateur $NEW_USER :"
-echo "   curl -sSL https://dokploy.com/install.sh | sh"
-echo ""
-STEP_NUM=$((STEP_NUM + 1))
+if [[ ! $INSTALL_DOKPLOY =~ ^[Yy]$ ]]; then
+    echo "${STEP_NUM}. INSTALLER DOKPLOY (si souhaite)"
+    echo "   curl -sSL https://dokploy.com/install.sh | sh"
+    echo ""
+    STEP_NUM=$((STEP_NUM + 1))
+fi
 
 echo "${STEP_NUM}. CONFIGURER LES DNS"
 echo "   Pointer vos domaines vers : $(hostname -I | awk '{print $1}')"
@@ -1246,15 +1744,14 @@ echo "   ou https://dokploy.votre-domaine.com:3000"
 echo ""
 
 echo "COMMANDES UTILES :"
-echo "   sudo ufw status verbose              # Etat du pare-feu"
+echo "   vps-help                              # Aide complete maintenance"
+echo "   sudo pgadmin enable                   # Ouvrir acces PostgreSQL"
+echo "   sudo pgadmin disable                  # Fermer acces PostgreSQL"
+echo "   sudo ufw status verbose               # Etat du pare-feu"
 echo "   sudo fail2ban-client status sshd      # Bannissements SSH"
-echo "   sudo fail2ban-client status recidive  # Recidivistes bannis"
-echo "   sudo systemctl status sshd            # Etat du service SSH"
-echo "   df -h                                 # Espace disque"
-echo "   free -h                               # Memoire + swap"
 echo "   htop                                  # Moniteur de ressources"
+echo "   df -h                                 # Espace disque"
 echo "   ls -lh /backup/postgres/              # Backups PostgreSQL"
-echo "   cat $LOG_FILE                         # Log de ce script"
 if [ "$SSH_PORT" != "22" ]; then
     echo "   sudo ss -tlnp | grep $SSH_PORT            # Verifier le port SSH"
 fi
