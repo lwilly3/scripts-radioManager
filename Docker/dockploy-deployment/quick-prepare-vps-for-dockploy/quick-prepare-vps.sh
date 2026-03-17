@@ -1093,7 +1093,12 @@ mkdir -p /var/lib/dokploy      # Donnees Dokploy (volumes, etc.)
 mkdir -p /var/log/dokploy      # Logs specifiques Dokploy
 
 # --- Repertoires de backups ---
-mkdir -p /backup/postgres      # Backups PostgreSQL (dumps SQL)
+# Les dumps PostgreSQL principaux sont stockes dans le volume Docker partage
+# ./backups:/backups (monte dans audace_db ET audace_api).
+# L'API FastAPI (backup_route.py) cherche les fichiers dans /backups/dump_*.sql.gz
+# pour les uploader vers Google Drive.
+# On cree aussi /backup/postgres sur l'hote comme copie de secours locale.
+mkdir -p /backup/postgres      # Copie de secours hote
 
 # Donner les bonnes permissions
 chown -R "$NEW_USER":"$NEW_USER" /opt/dokploy 2>/dev/null || true
@@ -1103,66 +1108,71 @@ echo "Repertoires crees :"
 echo "   /opt/dokploy       — configuration Dokploy"
 echo "   /var/lib/dokploy   — donnees Dokploy"
 echo "   /var/log/dokploy   — logs Dokploy"
-echo "   /backup/postgres   — backups PostgreSQL"
+echo "   /backup/postgres   — copie de secours hote"
 
 # --- Cron job pour backup PostgreSQL quotidien ---
-# Ce cron tourne DANS le systeme hote et execute pg_dumpall dans le container Docker.
+#
+# ARCHITECTURE DU BACKUP :
+# Le docker-compose.yml monte le volume ./backups:/backups dans DEUX containers :
+#   - audace_db  (PostgreSQL) : cree les dumps
+#   - audace_api (FastAPI)    : lit les dumps pour les uploader vers Google Drive
+#
+# L'API (backup_route.py) cherche : glob("/backups/dump_*.sql.gz")
+# => Le cron DOIT ecrire dans /backups/ du container (pas sur le filesystem hote !)
 #
 # Planning :
-# - 3h00 : dump complet de PostgreSQL (compresse en gzip)
-# - 3h30 : nettoyage des dumps de plus de 7 jours
-#
-# pg_dumpall : exporte TOUTES les bases de donnees et les roles.
-# gzip : compresse le dump (un dump de quelques GB → quelques centaines de MB).
-#
-# CONFIGURATION RADIOMANAGER :
-# - Le container PostgreSQL s'appelle "audace_db" (defini dans docker-compose.yml)
-# - L'utilisateur PostgreSQL est "audace_user" (variable DB_USER du docker-compose)
-# - Le superuser "postgres" est aussi disponible pour pg_dump
-# - Le filtre "name=audace_db" cherche le container par son nom exact
-# - En fallback, "ancestor=postgres" cherche tout container base sur l'image postgres
+# - 3h00 : dump dans le volume Docker partage /backups/ (visible par l'API)
+# - 3h10 : copie de secours sur le filesystem hote /backup/postgres/
+# - 3h30 : nettoyage des dumps de plus de 7 jours (volume Docker + hote)
 #
 # IMPORTANT : on utilise pg_dump (une seule base) et non pg_dumpall (cluster entier)
 # pour que la restauration avec psql -d audace_db fonctionne correctement.
 # pg_dump --clean --if-exists ajoute des DROP TABLE avant chaque CREATE TABLE.
 #
-# Si votre container a un nom different, modifiez la ligne ci-dessous.
-#
 # Pour restaurer un backup :
-#   gunzip < /backup/postgres/dump_20260313.sql.gz | docker exec -i audace_db psql -U audace_user -d audace_db
+#   docker exec audace_db bash -c 'gunzip < /backups/dump_20260313.sql.gz | psql -U audace_user -d audace_db'
 
 cat > /etc/cron.d/backup-postgres << 'CRON'
 # =============================================================================
-# Backup automatique PostgreSQL — genere par quick-prepare-vps.sh v2.1
+# Backup automatique PostgreSQL — genere par quick-prepare-vps.sh v3.0
 # =============================================================================
 # Tous les jours a 3h du matin, on cree un dump de la base audace_db.
+# Le dump est ecrit dans le volume Docker partage /backups/ pour etre
+# accessible par l'API FastAPI (upload vers Google Drive).
+# Une copie de secours est faite sur le filesystem hote.
 # Les backups de plus de 7 jours sont supprimes automatiquement.
 #
 # CONFIGURATION :
-# - Container : audace_db (nom defini dans docker-compose.yml du backend)
+# - Container DB : audace_db (docker-compose.yml)
+# - Container API : audace_api (lit /backups/ pour upload Google Drive)
 # - Base de donnees : audace_db
 # - Utilisateur dump : postgres (superuser)
-# - Format : pg_dump --clean --if-exists (DROP + CREATE, compatible psql -d)
-# - Si le container a un nom different, adaptez "audace_db" ci-dessous
+# - Volume Docker : ./backups:/backups (partage entre db et api)
+# - Format : pg_dump --clean --if-exists (DROP + CREATE)
 #
-# FORMAT DU CRON : minute heure jour_mois mois jour_semaine utilisateur commande
-#
-# Pour lister les backups : ls -lh /backup/postgres/
-# Pour restaurer : gunzip < /backup/postgres/dump_YYYYMMDD.sql.gz | docker exec -i audace_db psql -U audace_user -d audace_db
+# Pour lister les backups : docker exec audace_api ls -lh /backups/
+# Pour restaurer : docker exec audace_db bash -c 'gunzip < /backups/dump_YYYYMMDD.sql.gz | psql -U audace_user -d audace_db'
 # =============================================================================
 
-# Dump base audace_db a 3h00 tous les jours
-# Essaie d'abord le container "audace_db", sinon cherche tout container postgres
-0 3 * * * root CONTAINER=$(docker ps -qf "name=audace_db" 2>/dev/null | head -1); [ -z "$CONTAINER" ] && CONTAINER=$(docker ps -qf "ancestor=postgres" 2>/dev/null | head -1); [ -n "$CONTAINER" ] && docker exec -t $CONTAINER pg_dump --clean --if-exists -U postgres audace_db 2>/dev/null | gzip > /backup/postgres/dump_$(date +\%Y\%m\%d).sql.gz 2>/dev/null || true
+# Dump base audace_db a 3h00 — ecrit dans le volume Docker /backups/
+# Utilise "docker exec bash -c" pour que le fichier soit cree DANS le volume partage
+0 3 * * * root docker exec audace_db bash -c 'pg_dump --clean --if-exists -U postgres audace_db | gzip > /backups/dump_$(date +\%Y\%m\%d).sql.gz' >> /var/log/backup-db.log 2>&1 || true
 
-# Nettoyage des vieux backups (> 7 jours) a 3h30
-30 3 * * * root find /backup/postgres -name "dump_*.sql.gz" -mtime +7 -delete 2>/dev/null || true
+# Copie de secours sur le filesystem hote a 3h10
+10 3 * * * root docker cp audace_db:/backups/dump_$(date +\%Y\%m\%d).sql.gz /backup/postgres/ >> /var/log/backup-db.log 2>&1 || true
+
+# Nettoyage des vieux backups (> 7 jours) a 3h30 — volume Docker + hote
+30 3 * * * root docker exec audace_db find /backups -name "dump_*.sql.gz" -mtime +7 -delete 2>/dev/null || true
+35 3 * * * root find /backup/postgres -name "dump_*.sql.gz" -mtime +7 -delete 2>/dev/null || true
 CRON
 
 # Les fichiers cron dans /etc/cron.d doivent avoir les permissions 644
 chmod 644 /etc/cron.d/backup-postgres
 
-echo "Backup PostgreSQL quotidien configure (3h00, retention 7 jours)"
+echo "Backup PostgreSQL quotidien configure :"
+echo "   3h00  — dump dans volume Docker /backups/ (visible par l'API)"
+echo "   3h10  — copie de secours sur /backup/postgres/ (hote)"
+echo "   3h30  — nettoyage des dumps > 7 jours"
 
 
 # =============================================================================
@@ -1418,11 +1428,14 @@ echo -e "    ${GREEN}\\du${NC}                          Liste les roles/utilisat
 echo -e "    ${GREEN}SELECT version();${NC}             Version PostgreSQL"
 echo -e "    ${GREEN}\\q${NC}                           Quitter"
 echo ""
-echo -e "  ${CYAN}Backup manuel :${NC}"
-echo -e "    ${GREEN}docker exec -t audace_db pg_dump --clean --if-exists -U postgres audace_db | gzip > /backup/postgres/dump_manuel.sql.gz${NC}"
+echo -e "  ${CYAN}Backup manuel (dans le volume Docker, visible par l'API) :${NC}"
+echo -e "    ${GREEN}docker exec audace_db bash -c 'pg_dump --clean --if-exists -U postgres audace_db | gzip > /backups/dump_manuel.sql.gz'${NC}"
+echo ""
+echo -e "  ${CYAN}Lister les backups :${NC}"
+echo -e "    ${GREEN}docker exec audace_api ls -lh /backups/${NC}"
 echo ""
 echo -e "  ${CYAN}Restaurer un backup :${NC}"
-echo -e "    ${GREEN}gunzip < /backup/postgres/dump_YYYYMMDD.sql.gz | docker exec -i audace_db psql -U audace_user -d audace_db${NC}"
+echo -e "    ${GREEN}docker exec audace_db bash -c 'gunzip < /backups/dump_YYYYMMDD.sql.gz | psql -U audace_user -d audace_db'${NC}"
 
 echo ""
 echo -e "${YELLOW}--- ALEMBIC (MIGRATIONS) ---${NC}"
@@ -1453,7 +1466,7 @@ echo -e "  ${GREEN}htop${NC}                         Moniteur de ressources (CPU
 echo -e "  ${GREEN}df -h${NC}                        Espace disque"
 echo -e "  ${GREEN}free -h${NC}                      Memoire + swap"
 echo -e "  ${GREEN}uptime${NC}                       Duree de fonctionnement"
-echo -e "  ${GREEN}ls -lh /backup/postgres/${NC}     Liste les backups"
+echo -e "  ${GREEN}docker exec audace_api ls -lh /backups/${NC}     Liste les backups"
 echo -e "  ${GREEN}sudo journalctl -u docker --since '1 hour ago'${NC}"
 echo "      Logs Docker systeme (derniere heure)"
 echo -e "  ${GREEN}sudo systemctl restart sshd${NC}  Redemarrer SSH"
@@ -1559,13 +1572,21 @@ BANNED=$(sudo fail2ban-client status sshd 2>/dev/null | grep "Currently banned" 
 BANNED=${BANNED:-0}
 
 # --- Dernier backup ---
-LAST_BACKUP=$(ls -t /backup/postgres/dump_*.sql.gz 2>/dev/null | head -1)
+# Verifier d'abord le volume Docker (source principale), sinon le dossier hote
+LAST_BACKUP=$(docker exec audace_api ls -t /backups/dump_*.sql.gz 2>/dev/null | head -1)
 if [ -n "$LAST_BACKUP" ]; then
-    BACKUP_DATE=$(stat -c %y "$LAST_BACKUP" 2>/dev/null | cut -d' ' -f1)
-    BACKUP_SIZE=$(du -h "$LAST_BACKUP" 2>/dev/null | awk '{print $1}')
+    BACKUP_DATE=$(docker exec audace_api stat -c %y "$LAST_BACKUP" 2>/dev/null | cut -d' ' -f1)
+    BACKUP_SIZE=$(docker exec audace_api du -h "$LAST_BACKUP" 2>/dev/null | awk '{print $1}')
     BACKUP_INFO="${BACKUP_DATE} (${BACKUP_SIZE})"
 else
-    BACKUP_INFO="Aucun"
+    LAST_BACKUP=$(ls -t /backup/postgres/dump_*.sql.gz 2>/dev/null | head -1)
+    if [ -n "$LAST_BACKUP" ]; then
+        BACKUP_DATE=$(stat -c %y "$LAST_BACKUP" 2>/dev/null | cut -d' ' -f1)
+        BACKUP_SIZE=$(du -h "$LAST_BACKUP" 2>/dev/null | awk '{print $1}')
+        BACKUP_INFO="${BACKUP_DATE} (${BACKUP_SIZE})"
+    else
+        BACKUP_INFO="Aucun"
+    fi
 fi
 
 echo ""
@@ -1751,7 +1772,7 @@ echo "   sudo ufw status verbose               # Etat du pare-feu"
 echo "   sudo fail2ban-client status sshd      # Bannissements SSH"
 echo "   htop                                  # Moniteur de ressources"
 echo "   df -h                                 # Espace disque"
-echo "   ls -lh /backup/postgres/              # Backups PostgreSQL"
+echo "   docker exec audace_api ls -lh /backups/  # Backups PostgreSQL"
 if [ "$SSH_PORT" != "22" ]; then
     echo "   sudo ss -tlnp | grep $SSH_PORT            # Verifier le port SSH"
 fi
