@@ -1790,7 +1790,8 @@ if [ -n "$ACTIVE_SESSIONS" ]; then
         W_USER=$(echo "$line" | awk '{print $1}')
         W_TTY=$(echo "$line" | awk '{print $2}')
         W_DATE=$(echo "$line" | awk '{print $3, $4}')
-        W_IP=$(echo "$line" | grep -oP '\(.*?\)' | tr -d '()' || echo "local")
+        W_IP=$(echo "$line" | grep -oP '\(.*?\)' | tr -d '()')
+        [ -z "$W_IP" ] && W_IP="local"
         # Marquer la session courante
         CURRENT_TTY=$(tty 2>/dev/null | sed 's|/dev/||')
         if [ "$W_TTY" = "$CURRENT_TTY" ]; then
@@ -1854,7 +1855,7 @@ elif [ -n "$AUTH_DATA" ]; then
     echo "$AUTH_DATA" | while IFS= read -r line; do
         L_USER=$(echo "$line" | grep -oP 'for \K\S+')
         L_IP=$(echo "$line" | grep -oP 'from \K[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
-        L_DATETIME=$(echo "$line" | grep -oP '^\S+' | head -1)
+        L_DATETIME=$(echo "$line" | awk '{print $1}')
         if echo "$L_DATETIME" | grep -qE '^[0-9]{4}-'; then
             L_DATE=$(echo "$L_DATETIME" | cut -dT -f1)
             L_TIME=$(echo "$L_DATETIME" | cut -dT -f2 | cut -d. -f1 | cut -d+ -f1)
@@ -1912,7 +1913,7 @@ echo "$SSH_LOGS_ALL" | grep "Failed password\|Invalid user" \
     | grep -oP 'from \K[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' \
     | sort | uniq -c | sort -rn | head -5 \
     | while read count ip; do
-        if echo "$BANNED_IPS" | grep -q "$ip"; then
+        if echo "$BANNED_IPS" | grep -qF "$ip"; then
             IS_BANNED="${RED}BANNIE${NC}"
         else
             IS_BANNED="${DIM}non bannie${NC}"
@@ -1942,9 +1943,10 @@ if [ -n "$BANNED_IPS" ]; then
     for ip in $BANNED_IPS; do
         [ -z "$ip" ] && continue
         BANNED_COUNT=$((BANNED_COUNT + 1))
-        IP_ATTEMPTS=$(echo "$SSH_LOGS_ALL" | grep "Failed password\|Invalid user" | grep -c "$ip" 2>/dev/null)
+        IP_ATTEMPTS=$(echo "$SSH_LOGS_ALL" | grep "Failed password\|Invalid user" | grep -cF "$ip" 2>/dev/null)
         IP_ATTEMPTS=${IP_ATTEMPTS:-0}
-        BANNED_SORTED="${BANNED_SORTED}${IP_ATTEMPTS} ${ip}\n"
+        BANNED_SORTED="${BANNED_SORTED}${IP_ATTEMPTS} ${ip}
+"
     done
 fi
 echo -e "  ${CYAN}IPs bannies (fail2ban) :${NC}  ${RED}${BANNED_COUNT}${NC} actives / ${F2B_TOTAL_BANNED} au total"
@@ -1952,7 +1954,7 @@ if [ "$BANNED_COUNT" -gt 0 ]; then
     printf "    ${BOLD}%-18s %s${NC}\n" "IP" "TENTATIVES"
     echo -e "    ${DIM}$(printf '%.0s─' {1..30})${NC}"
     # Afficher les 10 IPs avec le plus de tentatives
-    echo -e "$BANNED_SORTED" | sort -rn | head -10 | while read attempts ip; do
+    echo "$BANNED_SORTED" | sort -rn | head -10 | while read attempts ip; do
         [ -z "$ip" ] && continue
         printf "    ${RED}%-18s${NC} %s\n" "$ip" "$attempts"
     done
@@ -2082,7 +2084,7 @@ if [ -n "$CPU_HIGH" ]; then
     fi
 fi
 
-if [ $SUSPICIOUS -eq 0 ]; then
+if [ "$SUSPICIOUS" -eq 0 ]; then
     echo -e "  ${GREEN}Aucun processus suspect detecte${NC}"
 fi
 
@@ -2169,6 +2171,7 @@ SSH_ACTIVE_PORT=${SSH_ACTIVE_PORT:-22}
 #   - 53 (DNS systemd-resolved) — local uniquement
 KNOWN_PORTS="$SSH_ACTIVE_PORT 80 443 3000 5432 8000 6379 2377 7946 4789 53"
 UNEXPECTED_PORTS=""
+SEEN_PORTS=""
 while IFS= read -r line; do
     PORT=$(echo "$line" | awk '{print $4}' | rev | cut -d: -f1 | rev)
     if [ -n "$PORT" ]; then
@@ -2176,12 +2179,15 @@ while IFS= read -r line; do
         for kp in $KNOWN_PORTS; do
             [ "$PORT" = "$kp" ] && IS_KNOWN=1 && break
         done
-        if [ $IS_KNOWN -eq 0 ]; then
+        if [ "$IS_KNOWN" -eq 0 ]; then
             PROC=$(echo "$line" | sed -n 's/.*users:(("\([^"]*\)".*/\1/p')
             [ -z "$PROC" ] && PROC="?"
             ADDR=$(echo "$line" | awk '{print $4}' | rev | cut -d: -f2- | rev)
-            # Eviter les doublons
-            echo "$UNEXPECTED_PORTS" | grep -q "port $PORT " || UNEXPECTED_PORTS="${UNEXPECTED_PORTS}    ${RED}port ${PORT}${NC} — ${PROC} (${ADDR})\n"
+            # Eviter les doublons (tracker les ports sans codes ANSI)
+            if ! echo "$SEEN_PORTS" | grep -qF ":$PORT:"; then
+                SEEN_PORTS="${SEEN_PORTS}:$PORT:"
+                UNEXPECTED_PORTS="${UNEXPECTED_PORTS}    ${RED}port ${PORT}${NC} — ${PROC} (${ADDR})\n"
+            fi
         fi
     fi
 done <<< "$(sudo ss -tlnp 2>/dev/null | tail -n +2)"
@@ -2196,7 +2202,7 @@ else
 fi
 
 echo ""
-if [ $ISSUES -eq 0 ]; then
+if [ "$ISSUES" -eq 0 ]; then
     echo -e "  ${GREEN}${BOLD}VERDICT : Aucun probleme detecte${NC}"
 else
     echo -e "  ${YELLOW}${BOLD}VERDICT : $ISSUES point(s) a verifier${NC}"
@@ -2249,10 +2255,14 @@ KERNEL=$(uname -r)
 # --- Memoire ---
 MEM_TOTAL=$(free -m | awk '/Mem:/{print $2}')
 MEM_USED=$(free -m | awk '/Mem:/{print $3}')
-MEM_PCT=$((MEM_USED * 100 / MEM_TOTAL))
-if [ $MEM_PCT -gt 80 ]; then
+if [ "${MEM_TOTAL:-0}" -gt 0 ]; then
+    MEM_PCT=$((MEM_USED * 100 / MEM_TOTAL))
+else
+    MEM_PCT=0
+fi
+if [ "$MEM_PCT" -gt 80 ]; then
     MEM_COLOR=$RED
-elif [ $MEM_PCT -gt 60 ]; then
+elif [ "$MEM_PCT" -gt 60 ]; then
     MEM_COLOR=$YELLOW
 else
     MEM_COLOR=$GREEN
@@ -2362,7 +2372,7 @@ else
         while IFS= read -r line; do
             LOGIN_USER=$(echo "$line" | grep -oP 'for \K\S+')
             LOGIN_IP=$(echo "$line" | grep -oP 'from \K[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
-            LOGIN_DATETIME=$(echo "$line" | grep -oP '^\S+' | head -1)
+            LOGIN_DATETIME=$(echo "$line" | awk '{print $1}')
             if echo "$LOGIN_DATETIME" | grep -qE '^[0-9]{4}-'; then
                 LOGIN_DATE=$(echo "$LOGIN_DATETIME" | cut -dT -f1)
                 LOGIN_TIME=$(echo "$LOGIN_DATETIME" | cut -dT -f2 | cut -d. -f1)
@@ -2385,7 +2395,7 @@ FAILED_24H=$(echo "$MOTD_FAIL_LOGS" | grep -c "Failed password\|Invalid user" 2>
 FAILED_24H=${FAILED_24H:-0}
 # Fallback auth.log si journalctl echoue ou retourne 0
 if [ "$FAILED_24H" -eq 0 ] && [ -f /var/log/auth.log ]; then
-    FAILED_24H=$(grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null | grep "$(date +%b\ %d)\|$(date -d yesterday +%b\ %d)" 2>/dev/null | wc -l)
+    FAILED_24H=$(grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null | grep "$(date '+%b %_d')\|$(date -d yesterday '+%b %_d' 2>/dev/null)" 2>/dev/null | wc -l)
 fi
 FAILED_24H=${FAILED_24H:-0}
 if [ "$FAILED_24H" -gt 0 ]; then
