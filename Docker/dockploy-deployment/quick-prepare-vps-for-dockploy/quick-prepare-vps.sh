@@ -2,7 +2,7 @@
 
 # =============================================================================
 #
-#  SCRIPT DE PREPARATION VPS — v3.0
+#  SCRIPT DE PREPARATION VPS — v3.1
 #
 #  Description :
 #    Ce script prepare un VPS vierge (Ubuntu/Debian) pour heberger des
@@ -1146,7 +1146,7 @@ cat > /etc/cron.d/backup-postgres << 'CRON'
 # - Container DB : audace_db (docker-compose.yml)
 # - Container API : audace_api (lit /backups/ pour upload Google Drive)
 # - Base de donnees : audace_db
-# - Utilisateur dump : postgres (superuser)
+# - Utilisateur dump : audace_user (POSTGRES_USER du docker-compose)
 # - Volume Docker : ./backups:/backups (partage entre db et api)
 # - Format : pg_dump --clean --if-exists (DROP + CREATE)
 #
@@ -1156,7 +1156,7 @@ cat > /etc/cron.d/backup-postgres << 'CRON'
 
 # Dump base audace_db a 3h00 — ecrit dans le volume Docker /backups/
 # Utilise "docker exec bash -c" pour que le fichier soit cree DANS le volume partage
-0 3 * * * root docker exec audace_db bash -c 'pg_dump --clean --if-exists -U postgres audace_db | gzip > /backups/dump_$(date +\%Y\%m\%d).sql.gz' >> /var/log/backup-db.log 2>&1 || true
+0 3 * * * root docker exec audace_db bash -c 'pg_dump --clean --if-exists -U audace_user audace_db | gzip > /backups/dump_$(date +\%Y\%m\%d).sql.gz' >> /var/log/backup-db.log 2>&1 || true
 
 # Copie de secours sur le filesystem hote a 3h10
 10 3 * * * root docker cp audace_db:/backups/dump_$(date +\%Y\%m\%d).sql.gz /backup/postgres/ >> /var/log/backup-db.log 2>&1 || true
@@ -1371,13 +1371,15 @@ echo "Commande 'pgadmin' installee (sudo pgadmin enable/disable/status)"
 cat > /usr/local/bin/vps-help << 'VPSHELP_EOF'
 #!/bin/bash
 # =============================================================================
-#  vps-help — Aide maintenance VPS RadioManager
+#  vps-help — Aide maintenance VPS RadioManager v2.0
 # =============================================================================
 
 YELLOW='\033[1;33m'
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
+RED='\033[0;31m'
 BOLD='\033[1m'
+DIM='\033[2m'
 NC='\033[0m'
 
 echo ""
@@ -1425,39 +1427,104 @@ echo ""
 echo -e "  ${CYAN}Commandes SQL utiles une fois connecte :${NC}"
 echo -e "    ${GREEN}\\dt${NC}                          Liste les tables"
 echo -e "    ${GREEN}\\du${NC}                          Liste les roles/utilisateurs"
+echo -e "    ${GREEN}\\d <table>${NC}                   Structure d'une table (colonnes, types)"
 echo -e "    ${GREEN}SELECT version();${NC}             Version PostgreSQL"
+echo -e "    ${GREEN}SELECT * FROM alembic_version;${NC} Revision Alembic actuelle"
 echo -e "    ${GREEN}\\q${NC}                           Quitter"
+
 echo ""
-echo -e "  ${CYAN}Backup manuel (dans le volume Docker, visible par l'API) :${NC}"
-echo -e "    ${GREEN}docker exec audace_db bash -c 'pg_dump --clean --if-exists -U postgres audace_db | gzip > /backups/dump_manuel.sql.gz'${NC}"
+echo -e "${YELLOW}--- BACKUPS ---${NC}"
+echo ""
+echo -e "  ${CYAN}Creer un backup manuel :${NC}"
+echo -e "    ${GREEN}docker exec audace_db bash -c 'pg_dump --clean --if-exists -U audace_user audace_db | gzip > /backups/dump_\$(date +%Y%m%d_%H%M%S).sql.gz'${NC}"
 echo ""
 echo -e "  ${CYAN}Lister les backups :${NC}"
-echo -e "    ${GREEN}docker exec audace_api ls -lh /backups/${NC}"
+echo -e "    ${GREEN}docker exec audace_db ls -lh /backups/${NC}"
 echo ""
 echo -e "  ${CYAN}Restaurer un backup :${NC}"
 echo -e "    ${GREEN}docker exec audace_db bash -c 'gunzip < /backups/dump_YYYYMMDD.sql.gz | psql -U audace_user -d audace_db'${NC}"
+echo ""
+echo -e "  ${CYAN}Telecharger un backup sur ton PC (depuis ton Mac via scp) :${NC}"
+echo -e "    ${DIM}# 1. Copier du conteneur vers le serveur${NC}"
+echo -e "    ${GREEN}docker cp audace_db:/backups/dump_YYYYMMDD.sql.gz /tmp/${NC}"
+echo -e "    ${DIM}# 2. Depuis ton Mac :${NC}"
+echo -e "    ${GREEN}scp user@<IP_VPS>:/tmp/dump_YYYYMMDD.sql.gz ~/Downloads/${NC}"
+echo ""
+echo -e "  ${CYAN}Upload un backup depuis ton PC vers le serveur :${NC}"
+echo -e "    ${DIM}# 1. Depuis ton Mac :${NC}"
+echo -e "    ${GREEN}scp ~/Downloads/dump_YYYYMMDD.sql.gz user@<IP_VPS>:/tmp/${NC}"
+echo -e "    ${DIM}# 2. Sur le serveur, copier dans le conteneur :${NC}"
+echo -e "    ${GREEN}docker cp /tmp/dump_YYYYMMDD.sql.gz audace_db:/backups/${NC}"
 
 echo ""
 echo -e "${YELLOW}--- ALEMBIC (MIGRATIONS) ---${NC}"
 echo ""
-echo -e "  ${GREEN}docker exec -it audace_api alembic current${NC}"
+echo -e "  ${GREEN}docker exec audace_api alembic current${NC}"
 echo "      Version actuelle de la migration"
-echo -e "  ${GREEN}docker exec -it audace_api alembic history --verbose${NC}"
+echo -e "  ${GREEN}docker exec audace_api alembic history --verbose${NC}"
 echo "      Historique des migrations"
-echo -e "  ${GREEN}docker exec -it audace_api alembic revision --autogenerate -m \"description\"${NC}"
+echo -e "  ${GREEN}docker exec audace_api alembic revision --autogenerate -m \"description\"${NC}"
 echo "      Generer une migration (JAMAIS a la main !)"
-echo -e "  ${GREEN}docker exec -it audace_api alembic upgrade head${NC}"
+echo -e "  ${GREEN}docker exec audace_api alembic upgrade head${NC}"
 echo "      Appliquer les migrations en attente"
+echo ""
+echo -e "  ${CYAN}Depannage apres restauration de backup :${NC}"
+echo -e "    ${DIM}# Si Alembic ne reconnait pas la revision de la base restauree :${NC}"
+echo -e "    ${GREEN}docker exec audace_db psql -U audace_user -d audace_db -c \"DELETE FROM alembic_version;\"${NC}"
+echo -e "    ${GREEN}docker exec audace_api alembic stamp head${NC}"
+echo -e "    ${DIM}# Cela dit a Alembic 'la base est a jour' sans executer les migrations${NC}"
 
 echo ""
-echo -e "${YELLOW}--- SECURITE ---${NC}"
+echo -e "${YELLOW}--- DIAGNOSTIC RAPIDE ---${NC}"
 echo ""
+echo -e "  ${CYAN}Verifier que l'API demarre correctement :${NC}"
+echo -e "    ${GREEN}docker logs audace_api --tail 20${NC}"
+echo -e "    ${DIM}# Chercher : 'Application startup complete' sans erreur avant${NC}"
+echo ""
+echo -e "  ${CYAN}Verifier la connexion DB depuis l'API :${NC}"
+echo -e "    ${GREEN}docker exec audace_api env | grep DATABASE${NC}"
+echo -e "    ${DIM}# Verifier que DATABASE_HOSTNAME, DATABASE_PASSWORD, etc. sont corrects${NC}"
+echo ""
+echo -e "  ${CYAN}Verifier l'etat des containers :${NC}"
+echo -e "    ${GREEN}docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'${NC}"
+echo -e "    ${DIM}# Si un container 'Restarting' en boucle → voir ses logs${NC}"
+echo ""
+echo -e "  ${CYAN}Tester l'API manuellement :${NC}"
+echo -e "    ${GREEN}docker exec audace_api curl -s http://localhost:8000/${NC}"
+echo -e "    ${DIM}# Doit retourner une reponse JSON${NC}"
+
+echo ""
+echo -e "${YELLOW}--- SECURITE / FAIL2BAN ---${NC}"
+echo ""
+echo -e "  ${CYAN}Pare-feu (UFW) :${NC}"
 echo -e "  ${GREEN}sudo ufw status verbose${NC}              Etat du pare-feu"
 echo -e "  ${GREEN}sudo ufw status numbered${NC}             Regles numerotees"
-echo -e "  ${GREEN}sudo fail2ban-client status${NC}          Jails actives"
-echo -e "  ${GREEN}sudo fail2ban-client status sshd${NC}     IPs bannies (SSH)"
-echo -e "  ${GREEN}sudo fail2ban-client set sshd unbanip 1.2.3.4${NC}"
-echo "      Debannir une IP"
+echo ""
+echo -e "  ${CYAN}Fail2ban — Voir les bans :${NC}"
+echo -e "  ${GREEN}sudo fail2ban-client status${NC}                    Liste des jails actives"
+echo -e "  ${GREEN}sudo fail2ban-client status sshd${NC}               IPs bannies (SSH)"
+echo -e "  ${GREEN}sudo fail2ban-client status traefik-auth${NC}       IPs bannies (HTTP auth)"
+echo ""
+echo -e "  ${CYAN}Fail2ban — Debannir une IP :${NC}"
+echo -e "  ${GREEN}sudo fail2ban-client set sshd unbanip <IP>${NC}"
+echo -e "    ${DIM}# Debannir une IP du jail SSH${NC}"
+echo -e "  ${GREEN}sudo fail2ban-client set traefik-auth unbanip <IP>${NC}"
+echo -e "    ${DIM}# Debannir une IP du jail Traefik (si le jail existe)${NC}"
+echo ""
+echo -e "  ${CYAN}Fail2ban — Debannir de TOUS les jails :${NC}"
+echo -e "    ${GREEN}for jail in \$(sudo fail2ban-client status | grep 'Jail list' | sed 's/.*://;s/,//g'); do sudo fail2ban-client set \$jail unbanip <IP> 2>/dev/null; done${NC}"
+echo ""
+echo -e "  ${CYAN}Fail2ban — Verifier si une IP est bannie :${NC}"
+echo -e "    ${GREEN}sudo fail2ban-client status sshd | grep <IP>${NC}"
+echo -e "    ${GREEN}sudo iptables -L -n | grep <IP>${NC}"
+echo ""
+echo -e "  ${CYAN}Fail2ban — Configuration :${NC}"
+echo -e "    ${GREEN}sudo cat /etc/fail2ban/jail.local${NC}             Voir la config"
+echo -e "    ${GREEN}sudo systemctl restart fail2ban${NC}               Redemarrer fail2ban"
+echo -e "    ${GREEN}sudo fail2ban-client set sshd bantime 600${NC}    Changer le ban a 10 min"
+echo ""
+echo -e "  ${RED}ATTENTION :${NC} Si tu es banni et ne peux plus acceder en SSH,"
+echo -e "  utilise la ${BOLD}console web${NC} de ton hebergeur (Dokploy/VPS panel) pour debannir."
 
 echo ""
 echo -e "${YELLOW}--- SYSTEME ---${NC}"
@@ -1466,7 +1533,6 @@ echo -e "  ${GREEN}htop${NC}                         Moniteur de ressources (CPU
 echo -e "  ${GREEN}df -h${NC}                        Espace disque"
 echo -e "  ${GREEN}free -h${NC}                      Memoire + swap"
 echo -e "  ${GREEN}uptime${NC}                       Duree de fonctionnement"
-echo -e "  ${GREEN}docker exec audace_api ls -lh /backups/${NC}     Liste les backups"
 echo -e "  ${GREEN}sudo journalctl -u docker --since '1 hour ago'${NC}"
 echo "      Logs Docker systeme (derniere heure)"
 echo -e "  ${GREEN}sudo systemctl restart sshd${NC}  Redemarrer SSH"
@@ -1484,8 +1550,19 @@ echo -e "${YELLOW}--- NETTOYAGE ESPACE DISQUE ---${NC}"
 echo ""
 echo -e "  ${GREEN}docker system prune -f${NC}                Nettoyer Docker (images/containers)"
 echo -e "  ${GREEN}docker system prune -a -f${NC}             Nettoyer Docker (+ images non utilisees)"
+echo -e "  ${GREEN}docker image prune -a -f${NC}              Supprimer les images non utilisees"
+echo -e "  ${GREEN}docker volume prune -f${NC}                Supprimer les volumes orphelins"
 echo -e "  ${GREEN}sudo journalctl --vacuum-size=100M${NC}    Limiter les logs systeme a 100MB"
 echo -e "  ${GREEN}sudo apt autoremove -y${NC}                Supprimer les paquets orphelins"
+echo -e "  ${GREEN}sudo du -sh /var/log/*${NC}                Voir la taille des logs"
+
+echo ""
+echo -e "${YELLOW}--- SSL / CERTIFICATS ---${NC}"
+echo ""
+echo -e "  ${CYAN}Les certificats sont geres par Traefik + Let's Encrypt automatiquement.${NC}"
+echo -e "  ${GREEN}docker logs dokploy-traefik --tail 20${NC}  Logs Traefik"
+echo -e "  ${GREEN}docker exec dokploy-traefik cat /etc/traefik/dynamic/acme.json | python3 -m json.tool | head -50${NC}"
+echo "      Voir les certificats actifs"
 
 echo ""
 VPSHELP_EOF
