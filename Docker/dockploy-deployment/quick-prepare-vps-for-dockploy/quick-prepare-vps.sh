@@ -1874,12 +1874,17 @@ if [ -f /var/log/auth.log ]; then
     echo -e "  ${CYAN}Top 5 IPs suspectes :${NC}"
     printf "  ${BOLD}%-18s %-8s %s${NC}\n" "IP" "ECHECS" "STATUT"
     echo -e "  ${DIM}$(printf '%.0s─' {1..40})${NC}"
+    # Recuperer la liste des IPs bannies UNE SEULE FOIS (evite sudo dans la boucle)
+    BANNED_IPS=$(sudo fail2ban-client status sshd 2>/dev/null | grep "Banned IP" | sed 's/.*Banned IP list:\s*//')
     grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null \
         | grep -oP 'from \K[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' \
         | sort | uniq -c | sort -rn | head -5 \
         | while read count ip; do
-            # Verifier si l'IP est bannie par fail2ban
-            IS_BANNED=$(sudo fail2ban-client status sshd 2>/dev/null | grep -q "$ip" && echo "${RED}BANNIE${NC}" || echo "${DIM}non bannie${NC}")
+            if echo "$BANNED_IPS" | grep -q "$ip"; then
+                IS_BANNED="${RED}BANNIE${NC}"
+            else
+                IS_BANNED="${DIM}non bannie${NC}"
+            fi
             printf "  %-18s %-8s %b\n" "$ip" "$count" "$IS_BANNED"
         done
 
