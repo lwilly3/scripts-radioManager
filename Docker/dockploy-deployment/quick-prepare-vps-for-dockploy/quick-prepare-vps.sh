@@ -1924,22 +1924,35 @@ echo "$SSH_LOGS_ALL" | grep "Failed password\|Invalid user" \
 
 # Liste des IPs actuellement bannies par fail2ban
 echo ""
-echo -e "  ${CYAN}IPs actuellement bannies (fail2ban) :${NC}"
+# Recuperer aussi les stats fail2ban (total banni depuis le demarrage)
+F2B_TOTAL_BANNED=$(sudo fail2ban-client status sshd 2>/dev/null | grep "Total banned" | sed 's/.*Total banned:\s*//')
+F2B_TOTAL_BANNED=${F2B_TOTAL_BANNED:-0}
 BANNED_COUNT=0
+BANNED_SORTED=""
 if [ -n "$BANNED_IPS" ]; then
+    # Compter et trier les IPs bannies par nombre de tentatives (decroissant)
     for ip in $BANNED_IPS; do
         [ -z "$ip" ] && continue
         BANNED_COUNT=$((BANNED_COUNT + 1))
-        # Chercher le nombre de tentatives de cette IP dans les logs
         IP_ATTEMPTS=$(echo "$SSH_LOGS_ALL" | grep "Failed password\|Invalid user" | grep -c "$ip" 2>/dev/null)
         IP_ATTEMPTS=${IP_ATTEMPTS:-0}
-        printf "    ${RED}%-18s${NC} %s tentatives\n" "$ip" "$IP_ATTEMPTS"
+        BANNED_SORTED="${BANNED_SORTED}${IP_ATTEMPTS} ${ip}\n"
     done
 fi
-if [ "$BANNED_COUNT" -eq 0 ]; then
-    echo -e "    ${DIM}Aucune IP bannie${NC}"
+echo -e "  ${CYAN}IPs bannies (fail2ban) :${NC}  ${RED}${BANNED_COUNT}${NC} actives / ${F2B_TOTAL_BANNED} au total"
+if [ "$BANNED_COUNT" -gt 0 ]; then
+    printf "    ${BOLD}%-18s %s${NC}\n" "IP" "TENTATIVES"
+    echo -e "    ${DIM}$(printf '%.0s─' {1..30})${NC}"
+    # Afficher les 10 IPs avec le plus de tentatives
+    echo -e "$BANNED_SORTED" | sort -rn | head -10 | while read attempts ip; do
+        [ -z "$ip" ] && continue
+        printf "    ${RED}%-18s${NC} %s\n" "$ip" "$attempts"
+    done
+    if [ "$BANNED_COUNT" -gt 10 ]; then
+        echo -e "    ${DIM}... et $((BANNED_COUNT - 10)) autres IP(s) bannies${NC}"
+    fi
 else
-    echo -e "  ${DIM}  Total : ${BANNED_COUNT} IP(s) bannie(s)${NC}"
+    echo -e "    ${DIM}Aucune IP bannie${NC}"
 fi
 
 # =============================================
