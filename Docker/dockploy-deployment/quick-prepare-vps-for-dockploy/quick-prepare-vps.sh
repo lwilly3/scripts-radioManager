@@ -1922,6 +1922,26 @@ echo "$SSH_LOGS_ALL" | grep "Failed password\|Invalid user" \
         printf "    %-20s %s tentatives\n" "$username" "$count"
     done
 
+# Liste des IPs actuellement bannies par fail2ban
+echo ""
+echo -e "  ${CYAN}IPs actuellement bannies (fail2ban) :${NC}"
+BANNED_COUNT=0
+if [ -n "$BANNED_IPS" ]; then
+    for ip in $BANNED_IPS; do
+        [ -z "$ip" ] && continue
+        BANNED_COUNT=$((BANNED_COUNT + 1))
+        # Chercher le nombre de tentatives de cette IP dans les logs
+        IP_ATTEMPTS=$(echo "$SSH_LOGS_ALL" | grep "Failed password\|Invalid user" | grep -c "$ip" 2>/dev/null)
+        IP_ATTEMPTS=${IP_ATTEMPTS:-0}
+        printf "    ${RED}%-18s${NC} %s tentatives\n" "$ip" "$IP_ATTEMPTS"
+    done
+fi
+if [ "$BANNED_COUNT" -eq 0 ]; then
+    echo -e "    ${DIM}Aucune IP bannie${NC}"
+else
+    echo -e "  ${DIM}  Total : ${BANNED_COUNT} IP(s) bannie(s)${NC}"
+fi
+
 # =============================================
 # 4. COMPTES AVEC PRIVILEGES
 # =============================================
