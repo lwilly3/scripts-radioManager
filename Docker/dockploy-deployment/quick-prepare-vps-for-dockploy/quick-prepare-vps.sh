@@ -142,6 +142,8 @@
 #  Securite :
 #    Apres execution, le serveur aura :
 #    - Login root SSH desactive
+#    - Compte "ubuntu" verrouille (mot de passe + sudo retire + compte expire)
+#    - Compte root verrouille (mot de passe desactive)
 #    - Authentification par cle SSH uniquement (si SSH_PUBKEY fournie)
 #    - Pare-feu UFW actif (seuls les ports necessaires sont ouverts)
 #    - Fail2ban avec bannissement progressif des recidivistes
@@ -526,6 +528,32 @@ else
     echo "   Vous devrez configurer l'authentification par cle manuellement"
     echo "   AVANT de desactiver l'authentification par mot de passe."
 fi
+
+# --- Verrouillage des comptes par defaut ---
+# Sur les VPS OVH/Ubuntu, le compte "ubuntu" est cree par defaut avec sudo.
+# Meme si AllowUsers bloque SSH, ce compte reste utilisable via :
+# - La console VNC/KVM de l'hebergeur
+# - Un service local compromis qui fait "su ubuntu"
+# On verrouille le mot de passe (passwd -l) et on retire sudo.
+# Le compte n'est PAS supprime car certains services systeme peuvent en dependre.
+
+for DEFAULT_USER in ubuntu; do
+    if id "$DEFAULT_USER" &>/dev/null && [ "$DEFAULT_USER" != "$NEW_USER" ]; then
+        echo ""
+        echo "Verrouillage du compte par defaut '$DEFAULT_USER'..."
+        # Verrouiller le mot de passe (empeche toute connexion par mot de passe)
+        passwd -l "$DEFAULT_USER" 2>/dev/null || true
+        # Retirer du groupe sudo (empeche l'escalade de privileges)
+        deluser "$DEFAULT_USER" sudo 2>/dev/null || true
+        # Expirer le compte (empeche toute connexion, meme par cle)
+        usermod --expiredate 1 "$DEFAULT_USER" 2>/dev/null || true
+        echo "Compte '$DEFAULT_USER' verrouille (mot de passe + sudo retire + compte expire)"
+    fi
+done
+
+# Verrouiller aussi root (par securite supplementaire)
+passwd -l root 2>/dev/null || true
+echo "Compte root verrouille (mot de passe desactive)"
 
 
 # =============================================================================
@@ -1866,6 +1894,8 @@ echo "   - Log du script : $LOG_FILE"
 echo ""
 echo "SECURITE CONFIGUREE :"
 echo "   [x] Root login SSH desactive"
+echo "   [x] Compte 'ubuntu' verrouille (sudo retire + compte expire)"
+echo "   [x] Compte root verrouille (mot de passe desactive)"
 echo "   [x] Pare-feu UFW actif (ports: $SSH_PORT, 80, 443, 3000)"
 echo "   [x] Docker ne peut pas contourner UFW"
 echo "   [x] Fail2ban : ban 24h apres 3 echecs, 7 jours pour les recidivistes"
