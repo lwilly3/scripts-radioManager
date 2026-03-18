@@ -1839,7 +1839,7 @@ if [ -n "$LAST_DATA" ]; then
     done
 else
     # Methode 2 (fallback) : journalctl puis auth.log — quand wtmp est vide (VPS frais)
-    AUTH_DATA=$(journalctl -u ssh -u sshd --no-pager -q 2>/dev/null | grep "Accepted" | tail -15)
+    AUTH_DATA=$(sudo journalctl -u ssh -u sshd --no-pager -q 2>/dev/null | grep "Accepted" | tail -15)
     [ -z "$AUTH_DATA" ] && AUTH_DATA=$(grep "Accepted" /var/log/auth.log 2>/dev/null | tail -15)
     if [ -n "$AUTH_DATA" ]; then
         echo "$AUTH_DATA" | while IFS= read -r line; do
@@ -1872,11 +1872,11 @@ echo -e "$SEPARATOR"
 # Source des logs SSH : journalctl (Ubuntu 24.04+) avec fallback auth.log
 # journalctl est la source principale car Ubuntu moderne utilise journald
 # Note: le fallback auth.log est dans un sous-shell separe pour eviter les problemes de pipe
-SSH_LOGS_TODAY=$(journalctl -u ssh -u sshd --since "today" --no-pager -q 2>/dev/null)
+SSH_LOGS_TODAY=$(sudo journalctl -u ssh -u sshd --since "today" --no-pager -q 2>/dev/null)
 [ -z "$SSH_LOGS_TODAY" ] && SSH_LOGS_TODAY=$(grep "sshd" /var/log/auth.log 2>/dev/null | grep "$(date '+%b %_d')")
-SSH_LOGS_YESTERDAY=$(journalctl -u ssh -u sshd --since "yesterday" --until "today" --no-pager -q 2>/dev/null)
+SSH_LOGS_YESTERDAY=$(sudo journalctl -u ssh -u sshd --since "yesterday" --until "today" --no-pager -q 2>/dev/null)
 [ -z "$SSH_LOGS_YESTERDAY" ] && SSH_LOGS_YESTERDAY=$(grep "sshd" /var/log/auth.log 2>/dev/null | grep "$(date -d yesterday '+%b %_d' 2>/dev/null)")
-SSH_LOGS_ALL=$(journalctl -u ssh -u sshd --no-pager -q 2>/dev/null)
+SSH_LOGS_ALL=$(sudo journalctl -u ssh -u sshd --no-pager -q 2>/dev/null)
 [ -z "$SSH_LOGS_ALL" ] && SSH_LOGS_ALL=$(grep "sshd" /var/log/auth.log 2>/dev/null)
 
 # grep -c retourne TOUJOURS un nombre (meme 0), mais exit code 1 quand count=0
@@ -2105,7 +2105,7 @@ else
 fi
 
 # Check: tentatives echouees (utilise journalctl en priorite)
-FAIL_LOGS=$(journalctl -u ssh -u sshd --since "today" --no-pager -q 2>/dev/null)
+FAIL_LOGS=$(sudo journalctl -u ssh -u sshd --since "today" --no-pager -q 2>/dev/null)
 [ -z "$FAIL_LOGS" ] && FAIL_LOGS=$(grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null | grep "$(date '+%b %_d')")
 FAIL_COUNT=$(echo "$FAIL_LOGS" | grep -c "Failed password\|Invalid user" 2>/dev/null)
 FAIL_COUNT=${FAIL_COUNT:-0}
