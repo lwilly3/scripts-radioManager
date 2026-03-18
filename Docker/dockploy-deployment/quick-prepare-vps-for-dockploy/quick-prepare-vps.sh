@@ -2,7 +2,7 @@
 
 # =============================================================================
 #
-#  SCRIPT DE PREPARATION VPS — v3.1
+#  SCRIPT DE PREPARATION VPS — v3.2
 #
 #  Description :
 #    Ce script prepare un VPS vierge (Ubuntu/Debian) pour heberger des
@@ -13,6 +13,14 @@
 #  Contexte :
 #    Concu pour le projet RadioManager (backend FastAPI + frontend React),
 #    deploye via Dokploy avec Traefik comme reverse proxy et Let's Encrypt SSL.
+#
+#  Apres execution de ce script :
+#    1. Deployer l'API via Dokploy (repo API/FASTAPI, docker-compose.yml)
+#    2. Definir les variables obligatoires dans Dokploy > Settings > Environment :
+#       - POSTGRES_PASSWORD, SECRET_KEY, ADMIN_PASSWORD, TOTP_ENCRYPTION_KEY
+#       (voir docker-compose.yml pour la liste complete)
+#    3. Deployer le frontend via Dokploy (repo radiomanager-modular, Nixpacks)
+#    4. Verifier : docker logs audace_api --tail 20
 #
 #  Usage :
 #    # Methode 1 — avec les valeurs par defaut :
@@ -67,9 +75,21 @@
 #    - Mises a jour de securite automatiques
 #    - Protection anti-spoofing reseau
 #
+#  Backups automatiques (cron installe par ce script) :
+#    - Cron : tous les jours a 03h00, pg_dump dans le volume Docker "backups_data"
+#    - A 03h10 : copie du dump sur le host dans /backup/postgres/
+#    - Retention : 7 jours (dans le volume ET sur le host)
+#    - Volume Docker "backups_data" partage entre les conteneurs db et api
+#    - Le backend (api) peut aussi declencher des backups manuels + upload Google Drive
+#    - Commande manuelle : docker exec audace_db pg_dump -U audace_user audace_db | gzip > backup.sql.gz
+#
+#  Commande vps-help :
+#    Apres installation, taper "vps-help" pour afficher un aide-memoire complet
+#    (Docker, PostgreSQL, Fail2ban, logs, maintenance)
+#
 #  Auteur : RadioManager Team
-#  Version : 3.0
-#  Derniere modification : 2026-03-17
+#  Version : 3.2
+#  Derniere modification : 2026-03-18
 #  Ancien script sauvegarde dans : bakup-script/quick-prepare-vps.v1.sh
 #
 # =============================================================================
