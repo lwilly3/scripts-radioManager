@@ -83,8 +83,8 @@
 #       ssh vps
 #
 #    Bonus — Transfert de fichiers simplifie :
-#       scp vps:/tmp/backup.sql.gz ~/Downloads/      # Telecharger
-#       scp ~/fichier.txt vps:/tmp/                   # Uploader
+#       scp vps:/backup/postgres/dump_YYYYMMDD.sql.gz ~/Downloads/   # Telecharger backup
+#       scp ~/fichier.txt vps:/tmp/                                  # Uploader
 #
 # =============================================================================
 #
@@ -155,7 +155,8 @@
 #    - Retention : 7 jours (dans le volume ET sur le host)
 #    - Volume Docker "backups_data" partage entre les conteneurs db et api
 #    - Le backend (api) peut aussi declencher des backups manuels + upload Google Drive
-#    - Commande manuelle : docker exec audace_db pg_dump -U audace_user audace_db | gzip > backup.sql.gz
+#    - Commande manuelle : docker exec audace_db bash -c 'pg_dump --clean --if-exists -U audace_user audace_db | gzip > /backups/dump_$(date +%Y%m%d_%H%M%S).sql.gz'
+#    - Lister : docker exec audace_api ls -lh /backups/
 #
 #  Commande vps-help :
 #    Apres installation, taper "vps-help" pour afficher un aide-memoire complet
@@ -1540,25 +1541,35 @@ echo -e "    ${GREEN}\\q${NC}                           Quitter"
 echo ""
 echo -e "${YELLOW}--- BACKUPS ---${NC}"
 echo ""
+echo -e "  ${DIM}Volume Docker 'backups_data' monte sur /backups dans audace_db ET audace_api${NC}"
+echo -e "  ${DIM}Copie hote automatique (cron 3h10) dans /backup/postgres/${NC}"
+echo ""
 echo -e "  ${CYAN}Creer un backup manuel :${NC}"
 echo -e "    ${GREEN}docker exec audace_db bash -c 'pg_dump --clean --if-exists -U audace_user audace_db | gzip > /backups/dump_\$(date +%Y%m%d_%H%M%S).sql.gz'${NC}"
 echo ""
-echo -e "  ${CYAN}Lister les backups :${NC}"
-echo -e "    ${GREEN}docker exec audace_db ls -lh /backups/${NC}"
+echo -e "  ${CYAN}Lister les backups (volume Docker) :${NC}"
+echo -e "    ${GREEN}docker exec audace_api ls -lh /backups/${NC}"
+echo -e "  ${CYAN}Lister les backups (copie hote) :${NC}"
+echo -e "    ${GREEN}ls -lh /backup/postgres/${NC}"
 echo ""
 echo -e "  ${CYAN}Restaurer un backup :${NC}"
 echo -e "    ${GREEN}docker exec audace_db bash -c 'gunzip < /backups/dump_YYYYMMDD.sql.gz | psql -U audace_user -d audace_db'${NC}"
 echo ""
-echo -e "  ${CYAN}Telecharger un backup sur ton PC (depuis ton Mac via scp) :${NC}"
-echo -e "    ${DIM}# 1. Copier du conteneur vers le serveur${NC}"
+echo -e "  ${CYAN}Telecharger un backup sur ton PC (methode simple — copie hote) :${NC}"
+echo -e "    ${DIM}# Les backups sont copies automatiquement sur l'hote a 3h10${NC}"
+echo -e "    ${DIM}# Depuis ton Mac :${NC}"
+echo -e "    ${GREEN}scp vps:/backup/postgres/dump_YYYYMMDD.sql.gz ~/Downloads/${NC}"
+echo ""
+echo -e "  ${CYAN}Telecharger un backup (methode alternative — depuis le volume Docker) :${NC}"
+echo -e "    ${DIM}# 1. Copier du conteneur vers /tmp sur le serveur${NC}"
 echo -e "    ${GREEN}docker cp audace_db:/backups/dump_YYYYMMDD.sql.gz /tmp/${NC}"
 echo -e "    ${DIM}# 2. Depuis ton Mac :${NC}"
-echo -e "    ${GREEN}scp user@<IP_VPS>:/tmp/dump_YYYYMMDD.sql.gz ~/Downloads/${NC}"
+echo -e "    ${GREEN}scp vps:/tmp/dump_YYYYMMDD.sql.gz ~/Downloads/${NC}"
 echo ""
 echo -e "  ${CYAN}Upload un backup depuis ton PC vers le serveur :${NC}"
 echo -e "    ${DIM}# 1. Depuis ton Mac :${NC}"
-echo -e "    ${GREEN}scp ~/Downloads/dump_YYYYMMDD.sql.gz user@<IP_VPS>:/tmp/${NC}"
-echo -e "    ${DIM}# 2. Sur le serveur, copier dans le conteneur :${NC}"
+echo -e "    ${GREEN}scp ~/Downloads/dump_YYYYMMDD.sql.gz vps:/tmp/${NC}"
+echo -e "    ${DIM}# 2. Sur le serveur, copier dans le volume Docker :${NC}"
 echo -e "    ${GREEN}docker cp /tmp/dump_YYYYMMDD.sql.gz audace_db:/backups/${NC}"
 
 echo ""
