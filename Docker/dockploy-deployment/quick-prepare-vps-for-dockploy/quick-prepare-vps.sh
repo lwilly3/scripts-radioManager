@@ -14,6 +14,45 @@
 #    Concu pour le projet RadioManager (backend FastAPI + frontend React),
 #    deploye via Dokploy avec Traefik comme reverse proxy et Let's Encrypt SSL.
 #
+# =============================================================================
+#  DEMARRAGE RAPIDE — Executer sur un VPS neuf
+# =============================================================================
+#
+#  1. Se connecter au VPS en root :
+#     ssh root@<IP_DU_VPS>
+#
+#  2. Telecharger le script :
+#     curl -O https://raw.githubusercontent.com/lwilly3/scripts-radioManager/main/Docker/dockploy-deployment/quick-prepare-vps-for-dockploy/quick-prepare-vps.sh
+#
+#  3. (Recommande) Recuperer sa cle SSH publique (depuis son Mac/PC) :
+#     cat ~/.ssh/id_ed25519.pub
+#     # Copier la ligne entiere (ssh-ed25519 AAAA... email)
+#
+#  4. Lancer le script :
+#     # Sans cle SSH (mot de passe uniquement) :
+#     sudo bash quick-prepare-vps.sh
+#
+#     # Avec cle SSH (recommande — desactive l'auth par mot de passe) :
+#     sudo SSH_PUBKEY="ssh-ed25519 AAAA... email" bash quick-prepare-vps.sh
+#
+#  5. Le script pose 3 questions interactives :
+#     - Changer le port SSH ? (recommande: oui, ex: 2222)
+#     - Installer Dokploy ? (oui)
+#     - Confirmer ? (oui)
+#
+#  6. Apres le script, dans un NOUVEAU terminal, tester la connexion :
+#     ssh -p <PORT> <USER>@<IP_DU_VPS>
+#     # Si ca marche, revenir sur l'ancien terminal et redemarrer SSH :
+#     sudo systemctl restart sshd
+#
+#  7. Acceder a Dokploy : https://<IP_DU_VPS>:3000
+#     - Creer un compte admin Dokploy
+#     - Deployer l'API (repo GitHub, type Docker Compose)
+#     - Definir les variables env obligatoires (voir section ci-dessous)
+#     - Deployer le frontend (repo GitHub, type Nixpacks)
+#
+# =============================================================================
+#
 #  Apres execution de ce script :
 #    1. Deployer l'API via Dokploy (repo API/FASTAPI, docker-compose.yml)
 #    2. Definir les variables obligatoires dans Dokploy > Settings > Environment :
