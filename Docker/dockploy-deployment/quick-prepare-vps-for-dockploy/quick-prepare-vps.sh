@@ -2070,6 +2070,35 @@ else
     ISSUES=$((ISSUES + 1))
 fi
 
+# Check: ports inattendus
+# Ports connus/attendus pour RadioManager + Dokploy + Docker Swarm + DNS
+KNOWN_PORTS="22 237 80 443 3000 5432 8000 6379 2377 7946 4789 53"
+UNEXPECTED_PORTS=""
+while IFS= read -r line; do
+    PORT=$(echo "$line" | awk '{print $4}' | rev | cut -d: -f1 | rev)
+    if [ -n "$PORT" ]; then
+        IS_KNOWN=0
+        for kp in $KNOWN_PORTS; do
+            [ "$PORT" = "$kp" ] && IS_KNOWN=1 && break
+        done
+        if [ $IS_KNOWN -eq 0 ]; then
+            PROC=$(echo "$line" | sed -n 's/.*users:(("\([^"]*\)".*/\1/p')
+            [ -z "$PROC" ] && PROC="?"
+            # Eviter les doublons
+            echo "$UNEXPECTED_PORTS" | grep -q "port $PORT " || UNEXPECTED_PORTS="${UNEXPECTED_PORTS}    port ${PORT} — ${PROC}\n"
+        fi
+    fi
+done <<< "$(sudo ss -tlnp 2>/dev/null | tail -n +2)"
+
+if [ -n "$UNEXPECTED_PORTS" ]; then
+    echo -e "  ${YELLOW}⚠ Ports inattendus ouverts :${NC}"
+    echo -e "$UNEXPECTED_PORTS"
+    echo -e "  ${DIM}  Ports attendus : ${KNOWN_PORTS}${NC}"
+    ISSUES=$((ISSUES + 1))
+else
+    echo -e "  ${GREEN}✓ Aucun port inattendu ouvert${NC}"
+fi
+
 echo ""
 if [ $ISSUES -eq 0 ]; then
     echo -e "  ${GREEN}${BOLD}VERDICT : Aucun probleme detecte${NC}"
