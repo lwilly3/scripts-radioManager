@@ -1871,15 +1871,21 @@ echo -e "$SEPARATOR"
 
 # Source des logs SSH : journalctl (Ubuntu 24.04+) avec fallback auth.log
 # journalctl est la source principale car Ubuntu moderne utilise journald
-SSH_LOGS_TODAY=$(journalctl -u ssh -u sshd --since "today" --no-pager -q 2>/dev/null || grep "sshd" /var/log/auth.log 2>/dev/null | grep "$(date '+%b %_d')")
-SSH_LOGS_YESTERDAY=$(journalctl -u ssh -u sshd --since "yesterday" --until "today" --no-pager -q 2>/dev/null || grep "sshd" /var/log/auth.log 2>/dev/null | grep "$(date -d yesterday '+%b %_d' 2>/dev/null)")
-SSH_LOGS_ALL=$(journalctl -u ssh -u sshd --no-pager -q 2>/dev/null || grep "sshd" /var/log/auth.log 2>/dev/null)
+# Note: le fallback auth.log est dans un sous-shell separe pour eviter les problemes de pipe
+SSH_LOGS_TODAY=$(journalctl -u ssh -u sshd --since "today" --no-pager -q 2>/dev/null)
+[ -z "$SSH_LOGS_TODAY" ] && SSH_LOGS_TODAY=$(grep "sshd" /var/log/auth.log 2>/dev/null | grep "$(date '+%b %_d')")
+SSH_LOGS_YESTERDAY=$(journalctl -u ssh -u sshd --since "yesterday" --until "today" --no-pager -q 2>/dev/null)
+[ -z "$SSH_LOGS_YESTERDAY" ] && SSH_LOGS_YESTERDAY=$(grep "sshd" /var/log/auth.log 2>/dev/null | grep "$(date -d yesterday '+%b %_d' 2>/dev/null)")
+SSH_LOGS_ALL=$(journalctl -u ssh -u sshd --no-pager -q 2>/dev/null)
+[ -z "$SSH_LOGS_ALL" ] && SSH_LOGS_ALL=$(grep "sshd" /var/log/auth.log 2>/dev/null)
 
-FAILED_TODAY=$(echo "$SSH_LOGS_TODAY" | grep -c "Failed password\|Invalid user" 2>/dev/null || echo 0)
-FAILED_YESTERDAY=$(echo "$SSH_LOGS_YESTERDAY" | grep -c "Failed password\|Invalid user" 2>/dev/null || echo 0)
-FAILED_TOTAL=$(echo "$SSH_LOGS_ALL" | grep -c "Failed password\|Invalid user" 2>/dev/null || echo 0)
+# grep -c retourne TOUJOURS un nombre (meme 0), mais exit code 1 quand count=0
+# On NE met PAS || echo 0 sinon on obtient "0\n0" qui casse les comparaisons numeriques
+FAILED_TODAY=$(echo "$SSH_LOGS_TODAY" | grep -c "Failed password\|Invalid user" 2>/dev/null)
 FAILED_TODAY=${FAILED_TODAY:-0}
+FAILED_YESTERDAY=$(echo "$SSH_LOGS_YESTERDAY" | grep -c "Failed password\|Invalid user" 2>/dev/null)
 FAILED_YESTERDAY=${FAILED_YESTERDAY:-0}
+FAILED_TOTAL=$(echo "$SSH_LOGS_ALL" | grep -c "Failed password\|Invalid user" 2>/dev/null)
 FAILED_TOTAL=${FAILED_TOTAL:-0}
 
 echo ""
@@ -2066,8 +2072,9 @@ else
 fi
 
 # Check: tentatives echouees (utilise journalctl en priorite)
-FAIL_COUNT=$(journalctl -u ssh -u sshd --since "today" --no-pager -q 2>/dev/null | grep -c "Failed password\|Invalid user" 2>/dev/null || echo 0)
-[ -z "$FAIL_COUNT" ] || [ "$FAIL_COUNT" -eq 0 ] && FAIL_COUNT=$(grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null | grep "$(date '+%b %_d')" | wc -l)
+FAIL_LOGS=$(journalctl -u ssh -u sshd --since "today" --no-pager -q 2>/dev/null)
+[ -z "$FAIL_LOGS" ] && FAIL_LOGS=$(grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null | grep "$(date '+%b %_d')")
+FAIL_COUNT=$(echo "$FAIL_LOGS" | grep -c "Failed password\|Invalid user" 2>/dev/null)
 FAIL_COUNT=${FAIL_COUNT:-0}
 if [ "$FAIL_COUNT" -gt 100 ]; then
     echo -e "  ${RED}⚠ $FAIL_COUNT tentatives echouees aujourd'hui — attaque en cours ?${NC}"
@@ -2332,10 +2339,13 @@ else
 fi
 
 # --- Tentatives echouees (24h) ---
-FAILED_24H=$(journalctl -u ssh -u sshd --since "24 hours ago" --no-pager -q 2>/dev/null | grep -c "Failed password\|Invalid user" 2>/dev/null || echo 0)
-[ "$FAILED_24H" = "" ] && FAILED_24H=0
-# Fallback auth.log si journalctl echoue
-[ "$FAILED_24H" -eq 0 ] && FAILED_24H=$(grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null | grep "$(date +%b\ %d)\|$(date -d yesterday +%b\ %d)" 2>/dev/null | wc -l)
+MOTD_FAIL_LOGS=$(journalctl -u ssh -u sshd --since "24 hours ago" --no-pager -q 2>/dev/null)
+FAILED_24H=$(echo "$MOTD_FAIL_LOGS" | grep -c "Failed password\|Invalid user" 2>/dev/null)
+FAILED_24H=${FAILED_24H:-0}
+# Fallback auth.log si journalctl echoue ou retourne 0
+if [ "$FAILED_24H" -eq 0 ] && [ -f /var/log/auth.log ]; then
+    FAILED_24H=$(grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null | grep "$(date +%b\ %d)\|$(date -d yesterday +%b\ %d)" 2>/dev/null | wc -l)
+fi
 FAILED_24H=${FAILED_24H:-0}
 if [ "$FAILED_24H" -gt 0 ]; then
     if [ "$FAILED_24H" -gt 50 ]; then
