@@ -1118,12 +1118,22 @@ echo "   /backup/postgres   — copie de secours hote"
 #   - audace_api (FastAPI)    : lit les dumps pour les uploader vers Google Drive
 #
 # L'API (backup_route.py) cherche : glob("/backups/dump_*.sql.gz")
-# => Le cron DOIT ecrire dans /backups/ du container (pas sur le filesystem hote !)
+#
+# METHODE : pipe pg_dump depuis le conteneur vers gzip sur l'hote.
+# L'ecriture directe dans le conteneur via "docker exec bash -c '... > /backups/...'"
+# ne fonctionne pas avec certains bind mounts Dokploy. On pipe donc le stdout
+# de pg_dump vers gzip sur l'hote, en ecrivant dans le repertoire source du bind mount.
+#
+# IMPORTANT : Le chemin du bind mount depend de l'installation Dokploy.
+# Apres le deploiement, identifier le chemin avec :
+#   docker inspect audace_db --format='{{json .Mounts}}' | python3 -m json.tool
+# Chercher le Mount avec Destination="/backups" et noter le champ "Source".
+# Puis mettre a jour BACKUP_HOST_DIR dans le cron ci-dessous.
 #
 # Planning :
-# - 3h00 : dump dans le volume Docker partage /backups/ (visible par l'API)
+# - 3h00 : dump pipe vers le bind mount hote (visible par l'API dans /backups/)
 # - 3h10 : copie de secours sur le filesystem hote /backup/postgres/
-# - 3h30 : nettoyage des dumps de plus de 7 jours (volume Docker + hote)
+# - 3h30 : nettoyage des dumps de plus de 7 jours (bind mount + hote)
 #
 # IMPORTANT : on utilise pg_dump (une seule base) et non pg_dumpall (cluster entier)
 # pour que la restauration avec psql -d audace_db fonctionne correctement.
@@ -1132,37 +1142,48 @@ echo "   /backup/postgres   — copie de secours hote"
 # Pour restaurer un backup :
 #   docker exec audace_db bash -c 'gunzip < /backups/dump_20260313.sql.gz | psql -U audace_user -d audace_db'
 
-cat > /etc/cron.d/backup-postgres << 'CRON'
+# Detecter le chemin du bind mount /backups/ sur l'hote
+BACKUP_HOST_DIR=$(docker inspect audace_db --format='{{range .Mounts}}{{if eq .Destination "/backups"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || echo "")
+
+if [ -z "$BACKUP_HOST_DIR" ]; then
+    echo "AVERTISSEMENT: Impossible de detecter le bind mount /backups/ du conteneur audace_db."
+    echo "Le conteneur n'est peut-etre pas encore deploye. Le cron utilisera un chemin generique."
+    echo "Apres le deploiement, executez :"
+    echo "  docker inspect audace_db --format='{{range .Mounts}}{{if eq .Destination \"/backups\"}}{{.Source}}{{end}}{{end}}'"
+    echo "Puis mettez a jour /etc/cron.d/backup-postgres avec le bon chemin."
+    BACKUP_HOST_DIR="/etc/dokploy/compose/VOTRE_SERVICE/code/backups"
+fi
+
+mkdir -p "$BACKUP_HOST_DIR" 2>/dev/null || true
+chmod 777 "$BACKUP_HOST_DIR" 2>/dev/null || true
+
+cat > /etc/cron.d/backup-postgres << CRON
 # =============================================================================
-# Backup automatique PostgreSQL — genere par quick-prepare-vps.sh v3.0
+# Backup automatique PostgreSQL — genere par quick-prepare-vps.sh v3.1
 # =============================================================================
-# Tous les jours a 3h du matin, on cree un dump de la base audace_db.
-# Le dump est ecrit dans le volume Docker partage /backups/ pour etre
-# accessible par l'API FastAPI (upload vers Google Drive).
-# Une copie de secours est faite sur le filesystem hote.
-# Les backups de plus de 7 jours sont supprimes automatiquement.
+# Methode : pipe pg_dump depuis le conteneur vers gzip sur l'hote
+# Le dump est ecrit dans le bind mount partage /backups/ (visible par l'API)
 #
 # CONFIGURATION :
 # - Container DB : audace_db (docker-compose.yml)
 # - Container API : audace_api (lit /backups/ pour upload Google Drive)
 # - Base de donnees : audace_db
 # - Utilisateur dump : audace_user (POSTGRES_USER du docker-compose)
-# - Volume Docker : ./backups:/backups (partage entre db et api)
+# - Bind mount hote : $BACKUP_HOST_DIR → /backups (dans les containers)
 # - Format : pg_dump --clean --if-exists (DROP + CREATE)
 #
 # Pour lister les backups : docker exec audace_api ls -lh /backups/
-# Pour restaurer : docker exec audace_db bash -c 'gunzip < /backups/dump_YYYYMMDD.sql.gz | psql -U audace_user -d audace_db'
+# Pour restaurer : gunzip < FICHIER.sql.gz | docker exec -i audace_db psql -U audace_user -d audace_db
 # =============================================================================
 
-# Dump base audace_db a 3h00 — ecrit dans le volume Docker /backups/
-# Utilise "docker exec bash -c" pour que le fichier soit cree DANS le volume partage
-0 3 * * * root docker exec audace_db bash -c 'pg_dump --clean --if-exists -U audace_user audace_db | gzip > /backups/dump_$(date +\%Y\%m\%d).sql.gz' >> /var/log/backup-db.log 2>&1 || true
+# Dump base audace_db a 3h00 — pipe vers le filesystem hote
+0 3 * * * root docker exec audace_db pg_dump --clean --if-exists -U audace_user audace_db | gzip > $BACKUP_HOST_DIR/dump_\$(date +\%Y\%m\%d).sql.gz 2>> /var/log/backup-db.log || true
 
-# Copie de secours sur le filesystem hote a 3h10
-10 3 * * * root docker cp audace_db:/backups/dump_$(date +\%Y\%m\%d).sql.gz /backup/postgres/ >> /var/log/backup-db.log 2>&1 || true
+# Copie de secours sur /backup/postgres/ a 3h10
+10 3 * * * root cp $BACKUP_HOST_DIR/dump_\$(date +\%Y\%m\%d).sql.gz /backup/postgres/ 2>> /var/log/backup-db.log || true
 
-# Nettoyage des vieux backups (> 7 jours) a 3h30 — volume Docker + hote
-30 3 * * * root docker exec audace_db find /backups -name "dump_*.sql.gz" -mtime +7 -delete 2>/dev/null || true
+# Nettoyage des vieux backups (> 7 jours) a 3h30
+30 3 * * * root find $BACKUP_HOST_DIR -name "dump_*.sql.gz" -mtime +7 -delete 2>/dev/null || true
 35 3 * * * root find /backup/postgres -name "dump_*.sql.gz" -mtime +7 -delete 2>/dev/null || true
 CRON
 
@@ -1170,7 +1191,8 @@ CRON
 chmod 644 /etc/cron.d/backup-postgres
 
 echo "Backup PostgreSQL quotidien configure :"
-echo "   3h00  — dump dans volume Docker /backups/ (visible par l'API)"
+echo "   Bind mount detecte : $BACKUP_HOST_DIR"
+echo "   3h00  — dump pipe vers $BACKUP_HOST_DIR (visible par l'API dans /backups/)"
 echo "   3h10  — copie de secours sur /backup/postgres/ (hote)"
 echo "   3h30  — nettoyage des dumps > 7 jours"
 
