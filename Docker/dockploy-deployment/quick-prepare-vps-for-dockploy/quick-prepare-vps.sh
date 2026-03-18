@@ -1810,23 +1810,25 @@ echo ""
 printf "  ${BOLD}%-14s %-16s %-12s %-6s %s${NC}\n" "UTILISATEUR" "IP" "DATE" "HEURE" "DUREE"
 echo -e "  ${DIM}$(printf '%.0s─' {1..56})${NC}"
 
-last -i -n 15 --time-format iso 2>/dev/null | while IFS= read -r line; do
+last -i -n 20 2>/dev/null | grep -vE '^$|^wtmp|^reboot|^shutdown' | head -15 | while IFS= read -r line; do
     [ -z "$line" ] && continue
-    echo "$line" | grep -q "^$\|^wtmp\|^reboot\|^shutdown" && continue
 
     L_USER=$(echo "$line" | awk '{print $1}')
     L_IP=$(echo "$line" | awk '{print $3}')
-    L_DATE=$(echo "$line" | awk '{print $4}' | cut -dT -f1)
-    L_TIME=$(echo "$line" | awk '{print $4}' | cut -dT -f2 | cut -d+ -f1 | cut -c1-5)
-    L_DURATION=$(echo "$line" | grep -oP '\(.*?\)' | tr -d '()')
+    # Format standard: user pts/X IP Day Mon DD HH:MM - HH:MM (duration)
+    L_DATE=$(echo "$line" | awk '{print $5, $6}')
+    L_TIME=$(echo "$line" | awk '{print $7}')
+    L_DURATION=$(echo "$line" | grep -oE '\([0-9:+]+\)' | tail -1)
 
     if echo "$line" | grep -q "still logged in"; then
         L_DURATION="${GREEN}actif${NC}"
+    elif echo "$line" | grep -q "gone - no logout"; then
+        L_DURATION="${YELLOW}pas de logout${NC}"
     elif [ -z "$L_DURATION" ]; then
         L_DURATION="-"
     fi
 
-    if [ -n "$L_USER" ]; then
+    if [ -n "$L_USER" ] && [ "$L_USER" != "wtmp" ]; then
         printf "  %-14s %-16s %-12s %-6s %b\n" "$L_USER" "$L_IP" "$L_DATE" "$L_TIME" "$L_DURATION"
     fi
 done
@@ -2244,16 +2246,28 @@ echo -e "  ${CYAN}Backup${NC}      ${BACKUP_INFO}"
 # --- Dernieres connexions SSH ---
 echo ""
 echo -e "  ${YELLOW}Dernieres connexions :${NC}"
-LAST_LOGINS=$(last -i -n 5 --time-format iso 2>/dev/null | head -5)
+# last -i affiche les IPs au lieu des hostnames
+# On filtre les lignes vides, wtmp, reboot, shutdown
+LAST_LOGINS=$(last -i -n 10 2>/dev/null | grep -vE '^$|^wtmp|^reboot|^shutdown' | head -5)
 if [ -n "$LAST_LOGINS" ]; then
     while IFS= read -r line; do
+        [ -z "$line" ] && continue
         LOGIN_USER=$(echo "$line" | awk '{print $1}')
         LOGIN_IP=$(echo "$line" | awk '{print $3}')
-        LOGIN_DATE=$(echo "$line" | awk '{print $4}' | cut -dT -f1)
-        LOGIN_TIME=$(echo "$line" | awk '{print $4}' | cut -dT -f2 | cut -d+ -f1 | cut -c1-5)
-        LOGIN_STATUS=$(echo "$line" | grep -q "still logged in" && echo "${GREEN}actif${NC}" || echo "termine")
-        if [ -n "$LOGIN_USER" ] && [ "$LOGIN_USER" != "" ]; then
-            printf "    ${DIM}%-12s${NC} %-16s ${DIM}%s %s${NC}  %b\n" "$LOGIN_USER" "$LOGIN_IP" "$LOGIN_DATE" "$LOGIN_TIME" "$LOGIN_STATUS"
+        # Format standard de last: user pts/X IP Day Mon DD HH:MM - HH:MM (duration)
+        # ou:                       user pts/X IP Day Mon DD HH:MM   still logged in
+        LOGIN_DAYMONTH=$(echo "$line" | awk '{print $5, $6}')
+        LOGIN_TIME=$(echo "$line" | awk '{print $7}')
+        if echo "$line" | grep -q "still logged in"; then
+            LOGIN_STATUS="${GREEN}actif${NC}"
+        elif echo "$line" | grep -q "gone - no logout"; then
+            LOGIN_STATUS="${YELLOW}pas de logout${NC}"
+        else
+            LOGIN_DURATION=$(echo "$line" | grep -oE '\([0-9:+]+\)' | tail -1)
+            LOGIN_STATUS="termine ${DIM}${LOGIN_DURATION}${NC}"
+        fi
+        if [ -n "$LOGIN_USER" ] && [ "$LOGIN_USER" != "wtmp" ]; then
+            printf "    ${DIM}%-12s${NC} %-16s ${DIM}%-8s %-6s${NC}  %b\n" "$LOGIN_USER" "$LOGIN_IP" "$LOGIN_DAYMONTH" "$LOGIN_TIME" "$LOGIN_STATUS"
         fi
     done <<< "$LAST_LOGINS"
 else
