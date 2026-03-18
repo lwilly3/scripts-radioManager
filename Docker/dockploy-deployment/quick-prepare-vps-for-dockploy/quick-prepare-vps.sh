@@ -52,6 +52,41 @@
 #     - Deployer le frontend (repo GitHub, type Nixpacks)
 #
 # =============================================================================
+#  RACCOURCI SSH — Se connecter avec "ssh vps" depuis son Mac/PC
+# =============================================================================
+#
+#  Apres installation, pour eviter de taper a chaque fois :
+#    ssh -p 237 dokploy@145.xx.xx.xx
+#
+#  Configurer un alias SSH sur votre Mac/PC (une seule fois) :
+#
+#    1. Ouvrir le fichier de config SSH local :
+#       nano ~/.ssh/config
+#
+#    2. Ajouter ce bloc a la fin du fichier :
+#       Host vps
+#           HostName <IP_DU_VPS>
+#           User <USER>
+#           Port <PORT>
+#           IdentityFile ~/.ssh/id_ed25519
+#
+#       Exemple concret :
+#       Host vps
+#           HostName 145.239.76.150
+#           User dokploy
+#           Port 237
+#           IdentityFile ~/.ssh/id_ed25519
+#
+#    3. Sauvegarder (Ctrl+O, Ctrl+X dans nano)
+#
+#    4. Desormais, se connecter avec :
+#       ssh vps
+#
+#    Bonus — Transfert de fichiers simplifie :
+#       scp vps:/tmp/backup.sql.gz ~/Downloads/      # Telecharger
+#       scp ~/fichier.txt vps:/tmp/                   # Uploader
+#
+# =============================================================================
 #
 #  Apres execution de ce script :
 #    1. Deployer l'API via Dokploy (repo API/FASTAPI, docker-compose.yml)
