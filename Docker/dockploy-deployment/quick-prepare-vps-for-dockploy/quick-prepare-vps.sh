@@ -36,7 +36,7 @@
 #     sudo SSH_PUBKEY="ssh-ed25519 AAAA... email" bash quick-prepare-vps.sh
 #
 #  5. Le script pose 3 questions interactives :
-#     - Changer le port SSH ? (recommande: oui, ex: 2222)
+#     - Changer le port SSH ? (recommande: oui, ex: 237 ou 2222)
 #     - Installer Dokploy ? (oui)
 #     - Confirmer ? (oui)
 #
@@ -278,12 +278,22 @@ read -p "Voulez-vous changer le port SSH par defaut (22) ? [y/N] " -n 1 -r CHANG
 echo ""
 
 if [[ $CHANGE_SSH_PORT =~ ^[Yy]$ ]]; then
-    read -p "   Entrez le nouveau port SSH (1024-65535, ex: 2222) : " CUSTOM_SSH_PORT
-    # Validation : le port doit etre un nombre entre 1024 et 65535.
-    # Les ports < 1024 sont "privilegies" et certains sont deja utilises (80, 443, etc.)
-    if [[ $CUSTOM_SSH_PORT =~ ^[0-9]+$ ]] && [ "$CUSTOM_SSH_PORT" -ge 1024 ] && [ "$CUSTOM_SSH_PORT" -le 65535 ]; then
-        SSH_PORT=$CUSTOM_SSH_PORT
-        echo "   Port SSH modifie : $SSH_PORT"
+    read -p "   Entrez le nouveau port SSH (100-65535, ex: 2222) : " CUSTOM_SSH_PORT
+    # Validation : le port doit etre un nombre entre 100 et 65535.
+    # On accepte les ports privilegies (< 1024) car SSH tourne en root.
+    # Les ports < 100 sont evites (services systeme courants : 22, 25, 53, 80...).
+    if [[ $CUSTOM_SSH_PORT =~ ^[0-9]+$ ]] && [ "$CUSTOM_SSH_PORT" -ge 100 ] && [ "$CUSTOM_SSH_PORT" -le 65535 ]; then
+        # Verification : eviter les ports deja utilises par d'autres services
+        if [ "$CUSTOM_SSH_PORT" -eq 80 ] || [ "$CUSTOM_SSH_PORT" -eq 443 ] || [ "$CUSTOM_SSH_PORT" -eq 3000 ]; then
+            echo "   Port $CUSTOM_SSH_PORT reserve (HTTP/HTTPS/Dokploy), utilisation du port par defaut : 22"
+            SSH_PORT=22
+        else
+            SSH_PORT=$CUSTOM_SSH_PORT
+            echo "   Port SSH modifie : $SSH_PORT"
+            if [ "$SSH_PORT" -lt 1024 ]; then
+                echo "   (port privilegie — fonctionne car SSH tourne en root)"
+            fi
+        fi
     else
         echo "   Port invalide, utilisation du port par defaut : 22"
         SSH_PORT=22
