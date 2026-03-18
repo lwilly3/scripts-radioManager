@@ -1529,6 +1529,7 @@ echo -e "  ${GREEN}sudo pgadmin enable 1.2.3.4${NC}  Ouvre pour une IP specifiqu
 echo -e "  ${GREEN}sudo pgadmin disable${NC}         Ferme l'acces PostgreSQL"
 echo -e "  ${GREEN}sudo pgadmin status${NC}          Etat de l'acces PostgreSQL"
 echo -e "  ${GREEN}vps-help${NC}                     Affiche cette aide"
+echo -e "  ${GREEN}vps-audit${NC}                    Audit de securite complet"
 
 echo ""
 echo -e "${YELLOW}--- DOCKER ---${NC}"
@@ -1714,6 +1715,338 @@ VPSHELP_EOF
 chmod +x /usr/local/bin/vps-help
 echo "Commande 'vps-help' installee (tapez vps-help pour l'aide complete)"
 
+# --- Commande vps-audit : audit de securite ---
+# Cette commande affiche un rapport detaille pour detecter toute activite suspecte :
+# - Sessions actives en ce moment
+# - Derniers logins (IP, date, duree)
+# - Tentatives de connexion echouees
+# - Comptes avec privileges sudo
+# - Ports en ecoute
+# - Processus suspects
+
+cat > /usr/local/bin/vps-audit << 'AUDIT_EOF'
+#!/bin/bash
+# =============================================================================
+#  vps-audit — Audit de securite RadioManager VPS
+#  Affiche un rapport complet pour detecter toute compromission potentielle
+# =============================================================================
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+SEPARATOR="${DIM}$(printf '%.0s─' {1..60})${NC}"
+
+echo ""
+echo -e "${BOLD}===========================================${NC}"
+echo -e "${BOLD}  AUDIT DE SECURITE — $(hostname)${NC}"
+echo -e "${BOLD}  $(date '+%Y-%m-%d %H:%M:%S')${NC}"
+echo -e "${BOLD}===========================================${NC}"
+
+# =============================================
+# 1. SESSIONS ACTIVES EN CE MOMENT
+# =============================================
+echo ""
+echo -e "${YELLOW}[1] SESSIONS ACTIVES${NC}"
+echo -e "$SEPARATOR"
+
+ACTIVE_SESSIONS=$(who 2>/dev/null)
+if [ -n "$ACTIVE_SESSIONS" ]; then
+    ACTIVE_COUNT=$(echo "$ACTIVE_SESSIONS" | wc -l)
+    if [ "$ACTIVE_COUNT" -gt 2 ]; then
+        echo -e "  ${RED}⚠ $ACTIVE_COUNT sessions actives (> 2 — verifier !)${NC}"
+    else
+        echo -e "  ${GREEN}$ACTIVE_COUNT session(s) active(s)${NC}"
+    fi
+    echo ""
+    printf "  ${BOLD}%-14s %-8s %-20s %s${NC}\n" "UTILISATEUR" "TTY" "DEPUIS" "IP"
+    echo -e "  ${DIM}$(printf '%.0s─' {1..56})${NC}"
+    while IFS= read -r line; do
+        W_USER=$(echo "$line" | awk '{print $1}')
+        W_TTY=$(echo "$line" | awk '{print $2}')
+        W_DATE=$(echo "$line" | awk '{print $3, $4}')
+        W_IP=$(echo "$line" | grep -oP '\(.*?\)' | tr -d '()' || echo "local")
+        # Marquer la session courante
+        CURRENT_TTY=$(tty 2>/dev/null | sed 's|/dev/||')
+        if [ "$W_TTY" = "$CURRENT_TTY" ]; then
+            printf "  ${GREEN}%-14s %-8s %-20s %s (vous)${NC}\n" "$W_USER" "$W_TTY" "$W_DATE" "$W_IP"
+        else
+            printf "  %-14s %-8s %-20s %s\n" "$W_USER" "$W_TTY" "$W_DATE" "$W_IP"
+        fi
+    done <<< "$ACTIVE_SESSIONS"
+else
+    echo -e "  ${GREEN}Aucune session active${NC}"
+fi
+
+# =============================================
+# 2. DERNIERS LOGINS (15 derniers)
+# =============================================
+echo ""
+echo -e "${YELLOW}[2] DERNIERS LOGINS (15 derniers)${NC}"
+echo -e "$SEPARATOR"
+echo ""
+printf "  ${BOLD}%-14s %-16s %-12s %-6s %s${NC}\n" "UTILISATEUR" "IP" "DATE" "HEURE" "DUREE"
+echo -e "  ${DIM}$(printf '%.0s─' {1..56})${NC}"
+
+last -i -n 15 --time-format iso 2>/dev/null | while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    echo "$line" | grep -q "^$\|^wtmp\|^reboot\|^shutdown" && continue
+
+    L_USER=$(echo "$line" | awk '{print $1}')
+    L_IP=$(echo "$line" | awk '{print $3}')
+    L_DATE=$(echo "$line" | awk '{print $4}' | cut -dT -f1)
+    L_TIME=$(echo "$line" | awk '{print $4}' | cut -dT -f2 | cut -d+ -f1 | cut -c1-5)
+    L_DURATION=$(echo "$line" | grep -oP '\(.*?\)' | tr -d '()')
+
+    if echo "$line" | grep -q "still logged in"; then
+        L_DURATION="${GREEN}actif${NC}"
+    elif [ -z "$L_DURATION" ]; then
+        L_DURATION="-"
+    fi
+
+    if [ -n "$L_USER" ]; then
+        printf "  %-14s %-16s %-12s %-6s %b\n" "$L_USER" "$L_IP" "$L_DATE" "$L_TIME" "$L_DURATION"
+    fi
+done
+
+# =============================================
+# 3. TENTATIVES DE CONNEXION ECHOUEES
+# =============================================
+echo ""
+echo -e "${YELLOW}[3] TENTATIVES ECHOUEES (derniers jours)${NC}"
+echo -e "$SEPARATOR"
+
+if [ -f /var/log/auth.log ]; then
+    # Compter les echecs par jour
+    FAILED_TODAY=$(grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null | grep "$(date '+%b %_d')" | wc -l)
+    FAILED_YESTERDAY=$(grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null | grep "$(date -d yesterday '+%b %_d' 2>/dev/null || date -v-1d '+%b %_d' 2>/dev/null)" | wc -l)
+    FAILED_TOTAL=$(grep -c "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null)
+
+    echo ""
+    echo -e "  Aujourd'hui :   $([ "$FAILED_TODAY" -gt 50 ] && echo -e "${RED}" || ([ "$FAILED_TODAY" -gt 10 ] && echo -e "${YELLOW}" || echo -e "${GREEN}"))${FAILED_TODAY}${NC} tentatives"
+    echo -e "  Hier :          $([ "$FAILED_YESTERDAY" -gt 50 ] && echo -e "${RED}" || ([ "$FAILED_YESTERDAY" -gt 10 ] && echo -e "${YELLOW}" || echo -e "${GREEN}"))${FAILED_YESTERDAY}${NC} tentatives"
+    echo -e "  Total (log) :   ${FAILED_TOTAL} tentatives"
+
+    # Top 5 des IPs qui echouent
+    echo ""
+    echo -e "  ${CYAN}Top 5 IPs suspectes :${NC}"
+    printf "  ${BOLD}%-18s %-8s %s${NC}\n" "IP" "ECHECS" "STATUT"
+    echo -e "  ${DIM}$(printf '%.0s─' {1..40})${NC}"
+    grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null \
+        | grep -oP 'from \K[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' \
+        | sort | uniq -c | sort -rn | head -5 \
+        | while read count ip; do
+            # Verifier si l'IP est bannie par fail2ban
+            IS_BANNED=$(sudo fail2ban-client status sshd 2>/dev/null | grep -q "$ip" && echo "${RED}BANNIE${NC}" || echo "${DIM}non bannie${NC}")
+            printf "  %-18s %-8s %b\n" "$ip" "$count" "$IS_BANNED"
+        done
+
+    # Top usernames testes
+    echo ""
+    echo -e "  ${CYAN}Top 5 usernames testes :${NC}"
+    grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null \
+        | grep -oP '(Invalid user |Failed password for (invalid user )?)\K\S+' \
+        | sort | uniq -c | sort -rn | head -5 \
+        | while read count username; do
+            printf "    %-20s %s tentatives\n" "$username" "$count"
+        done
+else
+    echo -e "  ${DIM}Fichier auth.log non disponible${NC}"
+fi
+
+# =============================================
+# 4. COMPTES AVEC PRIVILEGES
+# =============================================
+echo ""
+echo -e "${YELLOW}[4] COMPTES PRIVILEGES${NC}"
+echo -e "$SEPARATOR"
+echo ""
+
+echo -e "  ${CYAN}Comptes avec sudo :${NC}"
+SUDO_USERS=$(getent group sudo 2>/dev/null | cut -d: -f4)
+if [ -n "$SUDO_USERS" ]; then
+    IFS=',' read -ra USERS <<< "$SUDO_USERS"
+    for user in "${USERS[@]}"; do
+        # Verifier si le compte est verrouille
+        LOCKED=$(passwd -S "$user" 2>/dev/null | awk '{print $2}')
+        EXPIRED=$(chage -l "$user" 2>/dev/null | grep "Account expires" | grep -v "never")
+        if [ "$LOCKED" = "L" ] || [ -n "$EXPIRED" ]; then
+            echo -e "    ${DIM}$user (verrouille)${NC}"
+        else
+            echo -e "    ${GREEN}$user${NC} — actif"
+        fi
+    done
+else
+    echo -e "    ${DIM}Aucun${NC}"
+fi
+
+echo ""
+echo -e "  ${CYAN}Comptes pouvant se connecter en SSH :${NC}"
+ALLOW_USERS=$(grep "^AllowUsers" /etc/ssh/sshd_config 2>/dev/null | sed 's/AllowUsers//')
+if [ -n "$ALLOW_USERS" ]; then
+    echo -e "    ${GREEN}$ALLOW_USERS${NC} (AllowUsers)"
+else
+    echo -e "    ${RED}Pas de restriction AllowUsers — tous les comptes peuvent se connecter !${NC}"
+fi
+
+echo ""
+echo -e "  ${CYAN}Comptes avec shell de connexion :${NC}"
+grep -v 'nologin\|false\|sync\|halt\|shutdown' /etc/passwd 2>/dev/null \
+    | awk -F: '$3 >= 1000 || $1 == "root" {printf "    %-14s UID=%-6s %s\n", $1, $3, $7}'
+
+# =============================================
+# 5. PORTS EN ECOUTE
+# =============================================
+echo ""
+echo -e "${YELLOW}[5] PORTS EN ECOUTE${NC}"
+echo -e "$SEPARATOR"
+echo ""
+printf "  ${BOLD}%-8s %-24s %s${NC}\n" "PORT" "ADRESSE" "PROCESSUS"
+echo -e "  ${DIM}$(printf '%.0s─' {1..50})${NC}"
+
+ss -tlnp 2>/dev/null | tail -n +2 | while IFS= read -r line; do
+    PORT=$(echo "$line" | awk '{print $4}' | rev | cut -d: -f1 | rev)
+    ADDR=$(echo "$line" | awk '{print $4}' | rev | cut -d: -f2- | rev)
+    PROC=$(echo "$line" | grep -oP 'users:\(\("\K[^"]+' || echo "?")
+    # Colorer les ports bien connus
+    case $PORT in
+        22|237) printf "  ${GREEN}%-8s${NC} %-24s %s (SSH)\n" "$PORT" "$ADDR" "$PROC" ;;
+        80)     printf "  ${GREEN}%-8s${NC} %-24s %s (HTTP)\n" "$PORT" "$ADDR" "$PROC" ;;
+        443)    printf "  ${GREEN}%-8s${NC} %-24s %s (HTTPS)\n" "$PORT" "$ADDR" "$PROC" ;;
+        3000)   printf "  ${GREEN}%-8s${NC} %-24s %s (Dokploy)\n" "$PORT" "$ADDR" "$PROC" ;;
+        5432)   printf "  ${CYAN}%-8s${NC} %-24s %s (PostgreSQL)\n" "$PORT" "$ADDR" "$PROC" ;;
+        8000)   printf "  ${CYAN}%-8s${NC} %-24s %s (FastAPI)\n" "$PORT" "$ADDR" "$PROC" ;;
+        *)      printf "  ${YELLOW}%-8s${NC} %-24s %s\n" "$PORT" "$ADDR" "$PROC" ;;
+    esac
+done
+
+# =============================================
+# 6. PROCESSUS SUSPECTS
+# =============================================
+echo ""
+echo -e "${YELLOW}[6] VERIFICATION PROCESSUS${NC}"
+echo -e "$SEPARATOR"
+echo ""
+
+# Verifier les processus avec connexion reseau sortante
+SUSPICIOUS=0
+
+# Cryptominers connus
+if ps aux 2>/dev/null | grep -iE 'xmrig|minerd|cpuminer|stratum|cryptonight' | grep -v grep > /dev/null; then
+    echo -e "  ${RED}⚠ ALERTE : Processus de cryptominage detecte !${NC}"
+    ps aux | grep -iE 'xmrig|minerd|cpuminer|stratum|cryptonight' | grep -v grep
+    SUSPICIOUS=1
+fi
+
+# Reverse shells connus
+if ps aux 2>/dev/null | grep -iE 'nc -e|ncat -e|bash -i|/dev/tcp' | grep -v grep > /dev/null; then
+    echo -e "  ${RED}⚠ ALERTE : Possible reverse shell detecte !${NC}"
+    ps aux | grep -iE 'nc -e|ncat -e|bash -i|/dev/tcp' | grep -v grep
+    SUSPICIOUS=1
+fi
+
+# Charge CPU anormale
+CPU_HIGH=$(ps aux --sort=-%cpu 2>/dev/null | awk 'NR>1 && $3 > 80 {print $1, $11, $3"%"}' | head -3)
+if [ -n "$CPU_HIGH" ]; then
+    echo -e "  ${YELLOW}⚠ Processus a forte charge CPU (> 80%) :${NC}"
+    echo "$CPU_HIGH" | while read user cmd cpu; do
+        printf "    %-14s %-30s %s\n" "$user" "$cmd" "$cpu"
+    done
+    SUSPICIOUS=1
+fi
+
+if [ $SUSPICIOUS -eq 0 ]; then
+    echo -e "  ${GREEN}Aucun processus suspect detecte${NC}"
+fi
+
+# Top 5 processus par CPU
+echo ""
+echo -e "  ${CYAN}Top 5 processus (CPU) :${NC}"
+printf "  ${BOLD}%-10s %-6s %-6s %s${NC}\n" "USER" "CPU%" "MEM%" "COMMANDE"
+echo -e "  ${DIM}$(printf '%.0s─' {1..50})${NC}"
+ps aux --sort=-%cpu 2>/dev/null | awk 'NR>1 && NR<=6 {printf "  %-10s %-6s %-6s %s\n", $1, $3, $4, $11}'
+
+# =============================================
+# 7. RESUME / VERDICT
+# =============================================
+echo ""
+echo -e "${YELLOW}[7] RESUME${NC}"
+echo -e "$SEPARATOR"
+echo ""
+
+ISSUES=0
+
+# Check: sessions multiples
+SESS_COUNT=$(who 2>/dev/null | wc -l)
+if [ "$SESS_COUNT" -gt 2 ]; then
+    echo -e "  ${RED}⚠ $SESS_COUNT sessions actives — verifier si toutes sont legitimes${NC}"
+    ISSUES=$((ISSUES + 1))
+else
+    echo -e "  ${GREEN}✓ Sessions actives : $SESS_COUNT (normal)${NC}"
+fi
+
+# Check: tentatives echouees
+if [ -f /var/log/auth.log ]; then
+    FAIL_COUNT=$(grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null | grep "$(date '+%b %_d')" | wc -l)
+    if [ "$FAIL_COUNT" -gt 100 ]; then
+        echo -e "  ${RED}⚠ $FAIL_COUNT tentatives echouees aujourd'hui — attaque en cours ?${NC}"
+        ISSUES=$((ISSUES + 1))
+    elif [ "$FAIL_COUNT" -gt 20 ]; then
+        echo -e "  ${YELLOW}⚠ $FAIL_COUNT tentatives echouees aujourd'hui — surveiller${NC}"
+    else
+        echo -e "  ${GREEN}✓ Tentatives echouees aujourd'hui : $FAIL_COUNT (normal)${NC}"
+    fi
+fi
+
+# Check: AllowUsers
+if ! grep -q "^AllowUsers" /etc/ssh/sshd_config 2>/dev/null; then
+    echo -e "  ${RED}⚠ Pas de restriction AllowUsers dans sshd_config${NC}"
+    ISSUES=$((ISSUES + 1))
+else
+    echo -e "  ${GREEN}✓ AllowUsers configure${NC}"
+fi
+
+# Check: PermitRootLogin
+if grep -q "^PermitRootLogin yes" /etc/ssh/sshd_config 2>/dev/null; then
+    echo -e "  ${RED}⚠ Root login SSH autorise${NC}"
+    ISSUES=$((ISSUES + 1))
+else
+    echo -e "  ${GREEN}✓ Root login SSH desactive${NC}"
+fi
+
+# Check: fail2ban
+if systemctl is-active --quiet fail2ban 2>/dev/null; then
+    echo -e "  ${GREEN}✓ Fail2ban actif${NC}"
+else
+    echo -e "  ${RED}⚠ Fail2ban inactif${NC}"
+    ISSUES=$((ISSUES + 1))
+fi
+
+# Check: UFW
+if ufw status 2>/dev/null | grep -q "Status: active"; then
+    echo -e "  ${GREEN}✓ Pare-feu UFW actif${NC}"
+else
+    echo -e "  ${RED}⚠ Pare-feu UFW inactif${NC}"
+    ISSUES=$((ISSUES + 1))
+fi
+
+echo ""
+if [ $ISSUES -eq 0 ]; then
+    echo -e "  ${GREEN}${BOLD}VERDICT : Aucun probleme detecte${NC}"
+else
+    echo -e "  ${YELLOW}${BOLD}VERDICT : $ISSUES point(s) a verifier${NC}"
+fi
+echo ""
+
+AUDIT_EOF
+
+chmod +x /usr/local/bin/vps-audit
+echo "Commande 'vps-audit' installee (tapez vps-audit pour l'audit de securite)"
+
 
 # =============================================================================
 # ETAPE 14 : CONFIGURATION DE LA BANNIERE SSH (MOTD)
@@ -1834,8 +2167,43 @@ fi
 echo ""
 echo -e "  ${CYAN}Fail2ban${NC}    ${BANNED} IP(s) bannie(s)"
 echo -e "  ${CYAN}Backup${NC}      ${BACKUP_INFO}"
+
+# --- Dernieres connexions SSH ---
 echo ""
-echo -e "${DIM}  Tapez ${NC}${GREEN}vps-help${NC}${DIM} pour l'aide complete des commandes de maintenance${NC}"
+echo -e "  ${YELLOW}Dernieres connexions :${NC}"
+LAST_LOGINS=$(last -i -n 5 --time-format iso 2>/dev/null | head -5)
+if [ -n "$LAST_LOGINS" ]; then
+    while IFS= read -r line; do
+        LOGIN_USER=$(echo "$line" | awk '{print $1}')
+        LOGIN_IP=$(echo "$line" | awk '{print $3}')
+        LOGIN_DATE=$(echo "$line" | awk '{print $4}' | cut -dT -f1)
+        LOGIN_TIME=$(echo "$line" | awk '{print $4}' | cut -dT -f2 | cut -d+ -f1 | cut -c1-5)
+        LOGIN_STATUS=$(echo "$line" | grep -q "still logged in" && echo "${GREEN}actif${NC}" || echo "termine")
+        if [ -n "$LOGIN_USER" ] && [ "$LOGIN_USER" != "" ]; then
+            printf "    ${DIM}%-12s${NC} %-16s ${DIM}%s %s${NC}  %b\n" "$LOGIN_USER" "$LOGIN_IP" "$LOGIN_DATE" "$LOGIN_TIME" "$LOGIN_STATUS"
+        fi
+    done <<< "$LAST_LOGINS"
+else
+    echo -e "    ${DIM}Aucune connexion recente${NC}"
+fi
+
+# --- Tentatives echouees (24h) ---
+FAILED_24H=$(grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null | grep "$(date +%b\ %d)\|$(date -d yesterday +%b\ %d)" 2>/dev/null | wc -l)
+FAILED_24H=${FAILED_24H:-0}
+if [ "$FAILED_24H" -gt 0 ]; then
+    if [ "$FAILED_24H" -gt 50 ]; then
+        FAIL_COLOR=$RED
+    elif [ "$FAILED_24H" -gt 10 ]; then
+        FAIL_COLOR=$YELLOW
+    else
+        FAIL_COLOR=$GREEN
+    fi
+    echo ""
+    echo -e "  ${CYAN}Tentatives echouees (24h)${NC}  ${FAIL_COLOR}${FAILED_24H}${NC}"
+fi
+
+echo ""
+echo -e "${DIM}  Tapez ${NC}${GREEN}vps-help${NC}${DIM} pour l'aide | ${NC}${GREEN}vps-audit${NC}${DIM} pour l'audit de securite${NC}"
 echo ""
 MOTD_EOF
 
@@ -1913,7 +2281,8 @@ echo ""
 echo "OUTILS INSTALLES :"
 echo "   [x] pgadmin   — acces temporaire PostgreSQL (sudo pgadmin enable/disable)"
 echo "   [x] vps-help  — aide complete maintenance (tapez vps-help)"
-echo "   [x] Banniere SSH — status VPS affiche a chaque connexion"
+echo "   [x] vps-audit — audit de securite complet (tapez vps-audit)"
+echo "   [x] Banniere SSH — status VPS + derniers logins a chaque connexion"
 if [[ $INSTALL_DOKPLOY =~ ^[Yy]$ ]]; then
     echo "   [x] Dokploy installe (https://$(hostname -I | awk '{print $1}'):3000)"
 else
@@ -1989,6 +2358,7 @@ echo ""
 
 echo "COMMANDES UTILES :"
 echo "   vps-help                              # Aide complete maintenance"
+echo "   vps-audit                             # Audit de securite complet"
 echo "   sudo pgadmin enable                   # Ouvrir acces PostgreSQL"
 echo "   sudo pgadmin disable                  # Fermer acces PostgreSQL"
 echo "   sudo ufw status verbose               # Etat du pare-feu"
