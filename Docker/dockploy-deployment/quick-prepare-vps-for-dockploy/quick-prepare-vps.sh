@@ -1759,6 +1759,9 @@ NC='\033[0m'
 
 SEPARATOR="${DIM}$(printf '%.0s─' {1..60})${NC}"
 
+# Pre-charger le cache sudo pour eviter les prompts au milieu du rapport
+sudo -v 2>/dev/null
+
 echo ""
 echo -e "${BOLD}===========================================${NC}"
 echo -e "${BOLD}  AUDIT DE SECURITE — $(hostname)${NC}"
@@ -1836,14 +1839,23 @@ if [ -n "$LAST_DATA" ]; then
     done
 else
     # Methode 2 (fallback) : auth.log — quand wtmp est vide (VPS frais)
+    # Supporte le format syslog (Mar 18 19:22:19) ET journald (2026-03-18T19:22:19...)
     AUTH_DATA=$(grep "Accepted" /var/log/auth.log 2>/dev/null | tail -15)
     if [ -n "$AUTH_DATA" ]; then
         echo "$AUTH_DATA" | while IFS= read -r line; do
-            L_DATE=$(echo "$line" | awk '{print $1, $2}')
-            L_TIME=$(echo "$line" | awk '{print $3}')
-            L_USER=$(echo "$line" | awk '{print $9}')
-            L_IP=$(echo "$line" | awk '{print $11}')
-            printf "  %-14s %-16s %-12s %-6s %b\n" "$L_USER" "$L_IP" "$L_DATE" "$L_TIME" "${DIM}(auth.log)${NC}"
+            L_USER=$(echo "$line" | grep -oP 'for \K\S+')
+            L_IP=$(echo "$line" | grep -oP 'from \K[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+            L_DATETIME=$(echo "$line" | grep -oP '^\S+' | head -1)
+            if echo "$L_DATETIME" | grep -qE '^[0-9]{4}-'; then
+                L_DATE=$(echo "$L_DATETIME" | cut -dT -f1)
+                L_TIME=$(echo "$L_DATETIME" | cut -dT -f2 | cut -d. -f1)
+            else
+                L_DATE=$(echo "$line" | awk '{print $1, $2}')
+                L_TIME=$(echo "$line" | awk '{print $3}')
+            fi
+            if [ -n "$L_USER" ] && [ -n "$L_IP" ]; then
+                printf "  %-14s %-16s %-12s %-6s %b\n" "$L_USER" "$L_IP" "$L_DATE" "$L_TIME" "${DIM}(auth.log)${NC}"
+            fi
         done
     else
         echo -e "  ${DIM}Aucune connexion enregistree${NC}"
@@ -2003,7 +2015,8 @@ if ps aux 2>/dev/null | grep -iE 'nc -e|ncat -e|bash -i|/dev/tcp' | grep -v grep
 fi
 
 # Charge CPU anormale (ignore si uptime < 5 min — demarrage normal des services)
-CPU_HIGH=$(ps aux --sort=-%cpu 2>/dev/null | awk 'NR>1 && $3 > 80 {print $1, $11, $3"%"}' | head -3)
+# Exclure 'ps' et 'vps-audit' qui se capturent eux-memes
+CPU_HIGH=$(ps aux --sort=-%cpu 2>/dev/null | awk 'NR>1 && $3 > 80 && $11 !~ /ps$/ && $11 !~ /vps-audit/ {print $1, $11, $3"%"}' | head -3)
 if [ -n "$CPU_HIGH" ]; then
     if [ "$UPTIME_SEC" -lt 300 ]; then
         echo -e "  ${DIM}ℹ Processus a forte charge CPU (> 80%) — normal au demarrage (uptime < 5 min) :${NC}"
@@ -2028,7 +2041,7 @@ echo ""
 echo -e "  ${CYAN}Top 5 processus (CPU) :${NC}"
 printf "  ${BOLD}%-10s %-6s %-6s %s${NC}\n" "USER" "CPU%" "MEM%" "COMMANDE"
 echo -e "  ${DIM}$(printf '%.0s─' {1..50})${NC}"
-ps aux --sort=-%cpu 2>/dev/null | awk 'NR>1 && NR<=6 {printf "  %-10s %-6s %-6s %s\n", $1, $3, $4, $11}'
+ps aux --sort=-%cpu 2>/dev/null | awk 'NR>1 && $11 !~ /ps$/ && $11 !~ /awk/ {printf "  %-10s %-6s %-6s %s\n", $1, $3, $4, $11; if (++n>=5) exit}'
 
 # =============================================
 # 7. RESUME / VERDICT
@@ -2291,14 +2304,27 @@ if [ -n "$LAST_LOGINS" ]; then
     done <<< "$LAST_LOGINS"
 else
     # Methode 2 (fallback) : auth.log — quand wtmp est vide (VPS frais)
+    # Supporte le format syslog (Mar 18 19:22:19) ET journald (2026-03-18T19:22:19...)
     AUTH_LOGINS=$(grep "Accepted" /var/log/auth.log 2>/dev/null | tail -5)
     if [ -n "$AUTH_LOGINS" ]; then
         while IFS= read -r line; do
-            LOGIN_DATE=$(echo "$line" | awk '{print $1, $2}')
-            LOGIN_TIME=$(echo "$line" | awk '{print $3}')
-            LOGIN_USER=$(echo "$line" | awk '{print $9}')
-            LOGIN_IP=$(echo "$line" | awk '{print $11}')
-            printf "    ${DIM}%-12s${NC} %-16s ${DIM}%-6s %s${NC}\n" "$LOGIN_USER" "$LOGIN_IP" "$LOGIN_DATE" "$LOGIN_TIME"
+            # Extraire par pattern — fonctionne quel que soit le format de log
+            LOGIN_USER=$(echo "$line" | grep -oP 'for \K\S+')
+            LOGIN_IP=$(echo "$line" | grep -oP 'from \K[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+            # Date : essayer format journald (ISO) puis syslog
+            LOGIN_DATETIME=$(echo "$line" | grep -oP '^\S+' | head -1)
+            if echo "$LOGIN_DATETIME" | grep -qE '^[0-9]{4}-'; then
+                # Format journald : 2026-03-18T19:22:19.123+00:00
+                LOGIN_DATE=$(echo "$LOGIN_DATETIME" | cut -dT -f1)
+                LOGIN_TIME=$(echo "$LOGIN_DATETIME" | cut -dT -f2 | cut -d. -f1)
+            else
+                # Format syslog : Mar 18 19:22:19
+                LOGIN_DATE=$(echo "$line" | awk '{print $1, $2}')
+                LOGIN_TIME=$(echo "$line" | awk '{print $3}')
+            fi
+            if [ -n "$LOGIN_USER" ] && [ -n "$LOGIN_IP" ]; then
+                printf "    ${DIM}%-12s${NC} %-16s ${DIM}%s %s${NC}\n" "$LOGIN_USER" "$LOGIN_IP" "$LOGIN_DATE" "$LOGIN_TIME"
+            fi
         done <<< "$AUTH_LOGINS"
     else
         echo -e "    ${DIM}Aucune connexion recente${NC}"
