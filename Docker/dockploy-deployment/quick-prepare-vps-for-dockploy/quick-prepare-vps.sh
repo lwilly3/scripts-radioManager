@@ -2062,8 +2062,8 @@ else
     ISSUES=$((ISSUES + 1))
 fi
 
-# Check: UFW
-if ufw status 2>/dev/null | grep -q "Status: active"; then
+# Check: UFW (sudo requis pour lire le statut)
+if sudo ufw status 2>/dev/null | grep -q "Status: active"; then
     echo -e "  ${GREEN}✓ Pare-feu UFW actif${NC}"
 else
     echo -e "  ${RED}⚠ Pare-feu UFW inactif${NC}"
