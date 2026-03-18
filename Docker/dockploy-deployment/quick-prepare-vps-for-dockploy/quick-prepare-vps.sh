@@ -2071,8 +2071,15 @@ else
 fi
 
 # Check: ports inattendus
-# Ports connus/attendus pour RadioManager + Dokploy + Docker Swarm + DNS
-KNOWN_PORTS="22 237 80 443 3000 5432 8000 6379 2377 7946 4789 53"
+# Detecter le port SSH actif
+SSH_ACTIVE_PORT=$(grep -E "^Port " /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}')
+SSH_ACTIVE_PORT=${SSH_ACTIVE_PORT:-22}
+# Ports attendus :
+#   - SSH (detecte dynamiquement), 80 (HTTP), 443 (HTTPS), 3000 (Dokploy) — ouverts via UFW
+#   - 5432 (PostgreSQL), 8000 (FastAPI), 6379 (Redis) — internes Docker, pas dans UFW
+#   - 2377, 7946, 4789 (Docker Swarm) — internes Docker
+#   - 53 (DNS systemd-resolved) — local uniquement
+KNOWN_PORTS="$SSH_ACTIVE_PORT 80 443 3000 5432 8000 6379 2377 7946 4789 53"
 UNEXPECTED_PORTS=""
 while IFS= read -r line; do
     PORT=$(echo "$line" | awk '{print $4}' | rev | cut -d: -f1 | rev)
@@ -2084,8 +2091,9 @@ while IFS= read -r line; do
         if [ $IS_KNOWN -eq 0 ]; then
             PROC=$(echo "$line" | sed -n 's/.*users:(("\([^"]*\)".*/\1/p')
             [ -z "$PROC" ] && PROC="?"
+            ADDR=$(echo "$line" | awk '{print $4}' | rev | cut -d: -f2- | rev)
             # Eviter les doublons
-            echo "$UNEXPECTED_PORTS" | grep -q "port $PORT " || UNEXPECTED_PORTS="${UNEXPECTED_PORTS}    port ${PORT} — ${PROC}\n"
+            echo "$UNEXPECTED_PORTS" | grep -q "port $PORT " || UNEXPECTED_PORTS="${UNEXPECTED_PORTS}    ${RED}port ${PORT}${NC} — ${PROC} (${ADDR})\n"
         fi
     fi
 done <<< "$(sudo ss -tlnp 2>/dev/null | tail -n +2)"
@@ -2093,7 +2101,7 @@ done <<< "$(sudo ss -tlnp 2>/dev/null | tail -n +2)"
 if [ -n "$UNEXPECTED_PORTS" ]; then
     echo -e "  ${YELLOW}⚠ Ports inattendus ouverts :${NC}"
     echo -e "$UNEXPECTED_PORTS"
-    echo -e "  ${DIM}  Ports attendus : ${KNOWN_PORTS}${NC}"
+    echo -e "  ${DIM}  Ports attendus : SSH($SSH_ACTIVE_PORT) 80 443 3000 + internes Docker${NC}"
     ISSUES=$((ISSUES + 1))
 else
     echo -e "  ${GREEN}✓ Aucun port inattendu ouvert${NC}"
