@@ -1813,12 +1813,24 @@ echo ""
 printf "  ${BOLD}%-14s %-16s %-12s %-6s %s${NC}\n" "UTILISATEUR" "IP" "DATE" "HEURE" "DUREE"
 echo -e "  ${DIM}$(printf '%.0s─' {1..56})${NC}"
 
-# Methode 1 : last (lit /var/log/wtmp)
-LAST_DATA=$(last -i -n 20 2>/dev/null | grep -vE '^$|^wtmp|^reboot|^shutdown' | head -15)
-if [ -n "$LAST_DATA" ]; then
-    echo "$LAST_DATA" | while IFS= read -r line; do
-        [ -z "$line" ] && continue
+# Source principale : journalctl (fiable sur Ubuntu 24.04+)
+# Fallback : last (wtmp) puis auth.log
+AUTH_DATA=$(sudo journalctl -u ssh -u sshd --no-pager -q 2>/dev/null | grep "Accepted" | tail -15)
+if [ -z "$AUTH_DATA" ]; then
+    # Fallback last (lit /var/log/wtmp)
+    AUTH_DATA=$(last -i -n 20 2>/dev/null | grep -vE '^$|^wtmp|^reboot|^shutdown' | head -15)
+    AUTH_SOURCE="last"
+fi
+if [ -z "$AUTH_DATA" ]; then
+    # Fallback auth.log
+    AUTH_DATA=$(grep "Accepted" /var/log/auth.log 2>/dev/null | tail -15)
+    AUTH_SOURCE="authlog"
+fi
 
+if [ -n "$AUTH_DATA" ] && [ "${AUTH_SOURCE:-}" = "last" ]; then
+    # Format last : dokploy  pts/0  154.72.169.172  Wed Mar 18 20:35  still logged in
+    echo "$AUTH_DATA" | while IFS= read -r line; do
+        [ -z "$line" ] && continue
         L_USER=$(echo "$line" | awk '{print $1}')
         L_IP=$(echo "$line" | awk '{print $3}')
         L_DATE=$(echo "$line" | awk '{print $5, $6}')
@@ -1837,29 +1849,25 @@ if [ -n "$LAST_DATA" ]; then
             printf "  %-14s %-16s %-12s %-6s %b\n" "$L_USER" "$L_IP" "$L_DATE" "$L_TIME" "$L_DURATION"
         fi
     done
+elif [ -n "$AUTH_DATA" ]; then
+    # Format journalctl/auth.log : "2026-03-18T20:35:54... Accepted publickey for dokploy from 154.72..."
+    echo "$AUTH_DATA" | while IFS= read -r line; do
+        L_USER=$(echo "$line" | grep -oP 'for \K\S+')
+        L_IP=$(echo "$line" | grep -oP 'from \K[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+        L_DATETIME=$(echo "$line" | grep -oP '^\S+' | head -1)
+        if echo "$L_DATETIME" | grep -qE '^[0-9]{4}-'; then
+            L_DATE=$(echo "$L_DATETIME" | cut -dT -f1)
+            L_TIME=$(echo "$L_DATETIME" | cut -dT -f2 | cut -d. -f1 | cut -d+ -f1)
+        else
+            L_DATE=$(echo "$line" | awk '{print $1, $2}')
+            L_TIME=$(echo "$line" | awk '{print $3}')
+        fi
+        if [ -n "$L_USER" ] && [ -n "$L_IP" ]; then
+            printf "  %-14s %-16s %-12s %s\n" "$L_USER" "$L_IP" "$L_DATE" "$L_TIME"
+        fi
+    done
 else
-    # Methode 2 (fallback) : journalctl puis auth.log — quand wtmp est vide (VPS frais)
-    AUTH_DATA=$(sudo journalctl -u ssh -u sshd --no-pager -q 2>/dev/null | grep "Accepted" | tail -15)
-    [ -z "$AUTH_DATA" ] && AUTH_DATA=$(grep "Accepted" /var/log/auth.log 2>/dev/null | tail -15)
-    if [ -n "$AUTH_DATA" ]; then
-        echo "$AUTH_DATA" | while IFS= read -r line; do
-            L_USER=$(echo "$line" | grep -oP 'for \K\S+')
-            L_IP=$(echo "$line" | grep -oP 'from \K[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
-            L_DATETIME=$(echo "$line" | grep -oP '^\S+' | head -1)
-            if echo "$L_DATETIME" | grep -qE '^[0-9]{4}-'; then
-                L_DATE=$(echo "$L_DATETIME" | cut -dT -f1)
-                L_TIME=$(echo "$L_DATETIME" | cut -dT -f2 | cut -d. -f1)
-            else
-                L_DATE=$(echo "$line" | awk '{print $1, $2}')
-                L_TIME=$(echo "$line" | awk '{print $3}')
-            fi
-            if [ -n "$L_USER" ] && [ -n "$L_IP" ]; then
-                printf "  %-14s %-16s %-12s %-6s %b\n" "$L_USER" "$L_IP" "$L_DATE" "$L_TIME" "${DIM}(journal)${NC}"
-            fi
-        done
-    else
-        echo -e "  ${DIM}Aucune connexion enregistree${NC}"
-    fi
+    echo -e "  ${DIM}Aucune connexion enregistree${NC}"
 fi
 
 # =============================================
