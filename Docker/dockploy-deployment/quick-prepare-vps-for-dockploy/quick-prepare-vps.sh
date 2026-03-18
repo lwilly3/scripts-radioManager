@@ -1093,8 +1093,8 @@ mkdir -p /var/lib/dokploy      # Donnees Dokploy (volumes, etc.)
 mkdir -p /var/log/dokploy      # Logs specifiques Dokploy
 
 # --- Repertoires de backups ---
-# Les dumps PostgreSQL principaux sont stockes dans le volume Docker partage
-# ./backups:/backups (monte dans audace_db ET audace_api).
+# Les dumps PostgreSQL sont stockes dans le volume Docker nomme "backups_data"
+# (monte dans audace_db ET audace_api sur /backups).
 # L'API FastAPI (backup_route.py) cherche les fichiers dans /backups/dump_*.sql.gz
 # pour les uploader vers Google Drive.
 # On cree aussi /backup/postgres sur l'hote comme copie de secours locale.
