@@ -547,7 +547,9 @@ for DEFAULT_USER in ubuntu; do
         deluser "$DEFAULT_USER" sudo 2>/dev/null || true
         # Expirer le compte (empeche toute connexion, meme par cle)
         usermod --expiredate 1 "$DEFAULT_USER" 2>/dev/null || true
-        echo "Compte '$DEFAULT_USER' verrouille (mot de passe + sudo retire + compte expire)"
+        # Changer le shell en nologin (empeche toute session interactive)
+        usermod --shell /usr/sbin/nologin "$DEFAULT_USER" 2>/dev/null || true
+        echo "Compte '$DEFAULT_USER' verrouille (mot de passe + sudo + shell nologin + expire)"
     fi
 done
 
@@ -1840,7 +1842,8 @@ if [ -f /var/log/auth.log ]; then
     # Compter les echecs par jour
     FAILED_TODAY=$(grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null | grep "$(date '+%b %_d')" | wc -l)
     FAILED_YESTERDAY=$(grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null | grep "$(date -d yesterday '+%b %_d' 2>/dev/null || date -v-1d '+%b %_d' 2>/dev/null)" | wc -l)
-    FAILED_TOTAL=$(grep -c "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null)
+    FAILED_TOTAL=$(grep -c "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null || echo 0)
+    FAILED_TOTAL=${FAILED_TOTAL:-0}
 
     echo ""
     echo -e "  Aujourd'hui :   $([ "$FAILED_TODAY" -gt 50 ] && echo -e "${RED}" || ([ "$FAILED_TODAY" -gt 10 ] && echo -e "${YELLOW}" || echo -e "${GREEN}"))${FAILED_TODAY}${NC} tentatives"
@@ -1924,18 +1927,25 @@ echo ""
 printf "  ${BOLD}%-8s %-24s %s${NC}\n" "PORT" "ADRESSE" "PROCESSUS"
 echo -e "  ${DIM}$(printf '%.0s─' {1..50})${NC}"
 
-ss -tlnp 2>/dev/null | tail -n +2 | while IFS= read -r line; do
+sudo ss -tlnp 2>/dev/null | tail -n +2 | while IFS= read -r line; do
     PORT=$(echo "$line" | awk '{print $4}' | rev | cut -d: -f1 | rev)
     ADDR=$(echo "$line" | awk '{print $4}' | rev | cut -d: -f2- | rev)
-    PROC=$(echo "$line" | grep -oP 'users:\(\("\K[^"]+' || echo "?")
-    # Colorer les ports bien connus
+    # Extraire le nom du processus (format: users:(("name",pid=XXX,...)))
+    PROC=$(echo "$line" | sed -n 's/.*users:(("\([^"]*\)".*/\1/p')
+    [ -z "$PROC" ] && PROC="-"
+    # Colorer et identifier les ports bien connus
     case $PORT in
-        22|237) printf "  ${GREEN}%-8s${NC} %-24s %s (SSH)\n" "$PORT" "$ADDR" "$PROC" ;;
-        80)     printf "  ${GREEN}%-8s${NC} %-24s %s (HTTP)\n" "$PORT" "$ADDR" "$PROC" ;;
-        443)    printf "  ${GREEN}%-8s${NC} %-24s %s (HTTPS)\n" "$PORT" "$ADDR" "$PROC" ;;
-        3000)   printf "  ${GREEN}%-8s${NC} %-24s %s (Dokploy)\n" "$PORT" "$ADDR" "$PROC" ;;
-        5432)   printf "  ${CYAN}%-8s${NC} %-24s %s (PostgreSQL)\n" "$PORT" "$ADDR" "$PROC" ;;
-        8000)   printf "  ${CYAN}%-8s${NC} %-24s %s (FastAPI)\n" "$PORT" "$ADDR" "$PROC" ;;
+        22|237) printf "  ${GREEN}%-8s${NC} %-24s %s ${DIM}(SSH)${NC}\n" "$PORT" "$ADDR" "$PROC" ;;
+        80)     printf "  ${GREEN}%-8s${NC} %-24s %s ${DIM}(HTTP)${NC}\n" "$PORT" "$ADDR" "$PROC" ;;
+        443)    printf "  ${GREEN}%-8s${NC} %-24s %s ${DIM}(HTTPS)${NC}\n" "$PORT" "$ADDR" "$PROC" ;;
+        3000)   printf "  ${GREEN}%-8s${NC} %-24s %s ${DIM}(Dokploy)${NC}\n" "$PORT" "$ADDR" "$PROC" ;;
+        5432)   printf "  ${CYAN}%-8s${NC} %-24s %s ${DIM}(PostgreSQL)${NC}\n" "$PORT" "$ADDR" "$PROC" ;;
+        8000)   printf "  ${CYAN}%-8s${NC} %-24s %s ${DIM}(FastAPI)${NC}\n" "$PORT" "$ADDR" "$PROC" ;;
+        2377)   printf "  ${DIM}%-8s${NC} %-24s %s ${DIM}(Docker Swarm mgmt)${NC}\n" "$PORT" "$ADDR" "$PROC" ;;
+        7946)   printf "  ${DIM}%-8s${NC} %-24s %s ${DIM}(Docker Swarm gossip)${NC}\n" "$PORT" "$ADDR" "$PROC" ;;
+        4789)   printf "  ${DIM}%-8s${NC} %-24s %s ${DIM}(Docker VXLAN)${NC}\n" "$PORT" "$ADDR" "$PROC" ;;
+        53)     printf "  ${DIM}%-8s${NC} %-24s %s ${DIM}(DNS local)${NC}\n" "$PORT" "$ADDR" "$PROC" ;;
+        6379)   printf "  ${CYAN}%-8s${NC} %-24s %s ${DIM}(Redis)${NC}\n" "$PORT" "$ADDR" "$PROC" ;;
         *)      printf "  ${YELLOW}%-8s${NC} %-24s %s\n" "$PORT" "$ADDR" "$PROC" ;;
     esac
 done
@@ -1951,6 +1961,9 @@ echo ""
 # Verifier les processus avec connexion reseau sortante
 SUSPICIOUS=0
 
+# Uptime en secondes (pour ignorer les faux positifs au demarrage)
+UPTIME_SEC=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 9999)
+
 # Cryptominers connus
 if ps aux 2>/dev/null | grep -iE 'xmrig|minerd|cpuminer|stratum|cryptonight' | grep -v grep > /dev/null; then
     echo -e "  ${RED}⚠ ALERTE : Processus de cryptominage detecte !${NC}"
@@ -1965,14 +1978,21 @@ if ps aux 2>/dev/null | grep -iE 'nc -e|ncat -e|bash -i|/dev/tcp' | grep -v grep
     SUSPICIOUS=1
 fi
 
-# Charge CPU anormale
+# Charge CPU anormale (ignore si uptime < 5 min — demarrage normal des services)
 CPU_HIGH=$(ps aux --sort=-%cpu 2>/dev/null | awk 'NR>1 && $3 > 80 {print $1, $11, $3"%"}' | head -3)
 if [ -n "$CPU_HIGH" ]; then
-    echo -e "  ${YELLOW}⚠ Processus a forte charge CPU (> 80%) :${NC}"
-    echo "$CPU_HIGH" | while read user cmd cpu; do
-        printf "    %-14s %-30s %s\n" "$user" "$cmd" "$cpu"
-    done
-    SUSPICIOUS=1
+    if [ "$UPTIME_SEC" -lt 300 ]; then
+        echo -e "  ${DIM}ℹ Processus a forte charge CPU (> 80%) — normal au demarrage (uptime < 5 min) :${NC}"
+        echo "$CPU_HIGH" | while read user cmd cpu; do
+            printf "    ${DIM}%-14s %-30s %s${NC}\n" "$user" "$cmd" "$cpu"
+        done
+    else
+        echo -e "  ${YELLOW}⚠ Processus a forte charge CPU (> 80%) :${NC}"
+        echo "$CPU_HIGH" | while read user cmd cpu; do
+            printf "    %-14s %-30s %s\n" "$user" "$cmd" "$cpu"
+        done
+        SUSPICIOUS=1
+    fi
 fi
 
 if [ $SUSPICIOUS -eq 0 ]; then
