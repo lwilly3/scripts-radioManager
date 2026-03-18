@@ -1838,9 +1838,9 @@ if [ -n "$LAST_DATA" ]; then
         fi
     done
 else
-    # Methode 2 (fallback) : auth.log — quand wtmp est vide (VPS frais)
-    # Supporte le format syslog (Mar 18 19:22:19) ET journald (2026-03-18T19:22:19...)
-    AUTH_DATA=$(grep "Accepted" /var/log/auth.log 2>/dev/null | tail -15)
+    # Methode 2 (fallback) : journalctl puis auth.log — quand wtmp est vide (VPS frais)
+    AUTH_DATA=$(journalctl -u ssh -u sshd --no-pager -q 2>/dev/null | grep "Accepted" | tail -15)
+    [ -z "$AUTH_DATA" ] && AUTH_DATA=$(grep "Accepted" /var/log/auth.log 2>/dev/null | tail -15)
     if [ -n "$AUTH_DATA" ]; then
         echo "$AUTH_DATA" | while IFS= read -r line; do
             L_USER=$(echo "$line" | grep -oP 'for \K\S+')
@@ -1854,7 +1854,7 @@ else
                 L_TIME=$(echo "$line" | awk '{print $3}')
             fi
             if [ -n "$L_USER" ] && [ -n "$L_IP" ]; then
-                printf "  %-14s %-16s %-12s %-6s %b\n" "$L_USER" "$L_IP" "$L_DATE" "$L_TIME" "${DIM}(auth.log)${NC}"
+                printf "  %-14s %-16s %-12s %-6s %b\n" "$L_USER" "$L_IP" "$L_DATE" "$L_TIME" "${DIM}(journal)${NC}"
             fi
         done
     else
@@ -1869,49 +1869,52 @@ echo ""
 echo -e "${YELLOW}[3] TENTATIVES ECHOUEES (derniers jours)${NC}"
 echo -e "$SEPARATOR"
 
-if [ -f /var/log/auth.log ]; then
-    # Compter les echecs par jour
-    FAILED_TODAY=$(grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null | grep "$(date '+%b %_d')" | wc -l)
-    FAILED_YESTERDAY=$(grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null | grep "$(date -d yesterday '+%b %_d' 2>/dev/null || date -v-1d '+%b %_d' 2>/dev/null)" | wc -l)
-    FAILED_TOTAL=$(grep -c "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null || echo 0)
-    FAILED_TOTAL=${FAILED_TOTAL:-0}
+# Source des logs SSH : journalctl (Ubuntu 24.04+) avec fallback auth.log
+# journalctl est la source principale car Ubuntu moderne utilise journald
+SSH_LOGS_TODAY=$(journalctl -u ssh -u sshd --since "today" --no-pager -q 2>/dev/null || grep "sshd" /var/log/auth.log 2>/dev/null | grep "$(date '+%b %_d')")
+SSH_LOGS_YESTERDAY=$(journalctl -u ssh -u sshd --since "yesterday" --until "today" --no-pager -q 2>/dev/null || grep "sshd" /var/log/auth.log 2>/dev/null | grep "$(date -d yesterday '+%b %_d' 2>/dev/null)")
+SSH_LOGS_ALL=$(journalctl -u ssh -u sshd --no-pager -q 2>/dev/null || grep "sshd" /var/log/auth.log 2>/dev/null)
 
-    echo ""
-    echo -e "  Aujourd'hui :   $([ "$FAILED_TODAY" -gt 50 ] && echo -e "${RED}" || ([ "$FAILED_TODAY" -gt 10 ] && echo -e "${YELLOW}" || echo -e "${GREEN}"))${FAILED_TODAY}${NC} tentatives"
-    echo -e "  Hier :          $([ "$FAILED_YESTERDAY" -gt 50 ] && echo -e "${RED}" || ([ "$FAILED_YESTERDAY" -gt 10 ] && echo -e "${YELLOW}" || echo -e "${GREEN}"))${FAILED_YESTERDAY}${NC} tentatives"
-    echo -e "  Total (log) :   ${FAILED_TOTAL} tentatives"
+FAILED_TODAY=$(echo "$SSH_LOGS_TODAY" | grep -c "Failed password\|Invalid user" 2>/dev/null || echo 0)
+FAILED_YESTERDAY=$(echo "$SSH_LOGS_YESTERDAY" | grep -c "Failed password\|Invalid user" 2>/dev/null || echo 0)
+FAILED_TOTAL=$(echo "$SSH_LOGS_ALL" | grep -c "Failed password\|Invalid user" 2>/dev/null || echo 0)
+FAILED_TODAY=${FAILED_TODAY:-0}
+FAILED_YESTERDAY=${FAILED_YESTERDAY:-0}
+FAILED_TOTAL=${FAILED_TOTAL:-0}
 
-    # Top 5 des IPs qui echouent
-    echo ""
-    echo -e "  ${CYAN}Top 5 IPs suspectes :${NC}"
-    printf "  ${BOLD}%-18s %-8s %s${NC}\n" "IP" "ECHECS" "STATUT"
-    echo -e "  ${DIM}$(printf '%.0s─' {1..40})${NC}"
-    # Recuperer la liste des IPs bannies UNE SEULE FOIS (evite sudo dans la boucle)
-    BANNED_IPS=$(sudo fail2ban-client status sshd 2>/dev/null | grep "Banned IP" | sed 's/.*Banned IP list:\s*//')
-    grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null \
-        | grep -oP 'from \K[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' \
-        | sort | uniq -c | sort -rn | head -5 \
-        | while read count ip; do
-            if echo "$BANNED_IPS" | grep -q "$ip"; then
-                IS_BANNED="${RED}BANNIE${NC}"
-            else
-                IS_BANNED="${DIM}non bannie${NC}"
-            fi
-            printf "  %-18s %-8s %b\n" "$ip" "$count" "$IS_BANNED"
-        done
+echo ""
+echo -e "  Aujourd'hui :   $([ "$FAILED_TODAY" -gt 50 ] && echo -e "${RED}" || ([ "$FAILED_TODAY" -gt 10 ] && echo -e "${YELLOW}" || echo -e "${GREEN}"))${FAILED_TODAY}${NC} tentatives"
+echo -e "  Hier :          $([ "$FAILED_YESTERDAY" -gt 50 ] && echo -e "${RED}" || ([ "$FAILED_YESTERDAY" -gt 10 ] && echo -e "${YELLOW}" || echo -e "${GREEN}"))${FAILED_YESTERDAY}${NC} tentatives"
+echo -e "  Total (log) :   ${FAILED_TOTAL} tentatives"
 
-    # Top usernames testes
-    echo ""
-    echo -e "  ${CYAN}Top 5 usernames testes :${NC}"
-    grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null \
-        | grep -oP '(Invalid user |Failed password for (invalid user )?)\K\S+' \
-        | sort | uniq -c | sort -rn | head -5 \
-        | while read count username; do
-            printf "    %-20s %s tentatives\n" "$username" "$count"
-        done
-else
-    echo -e "  ${DIM}Fichier auth.log non disponible${NC}"
-fi
+# Top 5 des IPs qui echouent
+echo ""
+echo -e "  ${CYAN}Top 5 IPs suspectes :${NC}"
+printf "  ${BOLD}%-18s %-8s %s${NC}\n" "IP" "ECHECS" "STATUT"
+echo -e "  ${DIM}$(printf '%.0s─' {1..40})${NC}"
+# Recuperer la liste des IPs bannies UNE SEULE FOIS
+BANNED_IPS=$(sudo fail2ban-client status sshd 2>/dev/null | grep "Banned IP" | sed 's/.*Banned IP list:\s*//')
+echo "$SSH_LOGS_ALL" | grep "Failed password\|Invalid user" \
+    | grep -oP 'from \K[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' \
+    | sort | uniq -c | sort -rn | head -5 \
+    | while read count ip; do
+        if echo "$BANNED_IPS" | grep -q "$ip"; then
+            IS_BANNED="${RED}BANNIE${NC}"
+        else
+            IS_BANNED="${DIM}non bannie${NC}"
+        fi
+        printf "  %-18s %-8s %b\n" "$ip" "$count" "$IS_BANNED"
+    done
+
+# Top usernames testes
+echo ""
+echo -e "  ${CYAN}Top 5 usernames testes :${NC}"
+echo "$SSH_LOGS_ALL" | grep "Failed password\|Invalid user" \
+    | grep -oP '(Invalid user |Failed password for (invalid user )?)\K\S+' \
+    | sort | uniq -c | sort -rn | head -5 \
+    | while read count username; do
+        printf "    %-20s %s tentatives\n" "$username" "$count"
+    done
 
 # =============================================
 # 4. COMPTES AVEC PRIVILEGES
@@ -2062,17 +2065,17 @@ else
     echo -e "  ${GREEN}✓ Sessions actives : $SESS_COUNT (normal)${NC}"
 fi
 
-# Check: tentatives echouees
-if [ -f /var/log/auth.log ]; then
-    FAIL_COUNT=$(grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null | grep "$(date '+%b %_d')" | wc -l)
-    if [ "$FAIL_COUNT" -gt 100 ]; then
-        echo -e "  ${RED}⚠ $FAIL_COUNT tentatives echouees aujourd'hui — attaque en cours ?${NC}"
-        ISSUES=$((ISSUES + 1))
-    elif [ "$FAIL_COUNT" -gt 20 ]; then
-        echo -e "  ${YELLOW}⚠ $FAIL_COUNT tentatives echouees aujourd'hui — surveiller${NC}"
-    else
-        echo -e "  ${GREEN}✓ Tentatives echouees aujourd'hui : $FAIL_COUNT (normal)${NC}"
-    fi
+# Check: tentatives echouees (utilise journalctl en priorite)
+FAIL_COUNT=$(journalctl -u ssh -u sshd --since "today" --no-pager -q 2>/dev/null | grep -c "Failed password\|Invalid user" 2>/dev/null || echo 0)
+[ -z "$FAIL_COUNT" ] || [ "$FAIL_COUNT" -eq 0 ] && FAIL_COUNT=$(grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null | grep "$(date '+%b %_d')" | wc -l)
+FAIL_COUNT=${FAIL_COUNT:-0}
+if [ "$FAIL_COUNT" -gt 100 ]; then
+    echo -e "  ${RED}⚠ $FAIL_COUNT tentatives echouees aujourd'hui — attaque en cours ?${NC}"
+    ISSUES=$((ISSUES + 1))
+elif [ "$FAIL_COUNT" -gt 20 ]; then
+    echo -e "  ${YELLOW}⚠ $FAIL_COUNT tentatives echouees aujourd'hui — surveiller${NC}"
+else
+    echo -e "  ${GREEN}✓ Tentatives echouees aujourd'hui : $FAIL_COUNT (normal)${NC}"
 fi
 
 # Check: AllowUsers
@@ -2303,22 +2306,19 @@ if [ -n "$LAST_LOGINS" ]; then
         fi
     done <<< "$LAST_LOGINS"
 else
-    # Methode 2 (fallback) : auth.log — quand wtmp est vide (VPS frais)
-    # Supporte le format syslog (Mar 18 19:22:19) ET journald (2026-03-18T19:22:19...)
-    AUTH_LOGINS=$(grep "Accepted" /var/log/auth.log 2>/dev/null | tail -5)
+    # Methode 2 (fallback) : journalctl puis auth.log — quand wtmp est vide (VPS frais)
+    # journalctl est la source principale sur Ubuntu 24.04+ (journald)
+    AUTH_LOGINS=$(journalctl -u ssh -u sshd --no-pager -q 2>/dev/null | grep "Accepted" | tail -5)
+    [ -z "$AUTH_LOGINS" ] && AUTH_LOGINS=$(grep "Accepted" /var/log/auth.log 2>/dev/null | tail -5)
     if [ -n "$AUTH_LOGINS" ]; then
         while IFS= read -r line; do
-            # Extraire par pattern — fonctionne quel que soit le format de log
             LOGIN_USER=$(echo "$line" | grep -oP 'for \K\S+')
             LOGIN_IP=$(echo "$line" | grep -oP 'from \K[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
-            # Date : essayer format journald (ISO) puis syslog
             LOGIN_DATETIME=$(echo "$line" | grep -oP '^\S+' | head -1)
             if echo "$LOGIN_DATETIME" | grep -qE '^[0-9]{4}-'; then
-                # Format journald : 2026-03-18T19:22:19.123+00:00
                 LOGIN_DATE=$(echo "$LOGIN_DATETIME" | cut -dT -f1)
                 LOGIN_TIME=$(echo "$LOGIN_DATETIME" | cut -dT -f2 | cut -d. -f1)
             else
-                # Format syslog : Mar 18 19:22:19
                 LOGIN_DATE=$(echo "$line" | awk '{print $1, $2}')
                 LOGIN_TIME=$(echo "$line" | awk '{print $3}')
             fi
@@ -2332,7 +2332,10 @@ else
 fi
 
 # --- Tentatives echouees (24h) ---
-FAILED_24H=$(grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null | grep "$(date +%b\ %d)\|$(date -d yesterday +%b\ %d)" 2>/dev/null | wc -l)
+FAILED_24H=$(journalctl -u ssh -u sshd --since "24 hours ago" --no-pager -q 2>/dev/null | grep -c "Failed password\|Invalid user" 2>/dev/null || echo 0)
+[ "$FAILED_24H" = "" ] && FAILED_24H=0
+# Fallback auth.log si journalctl echoue
+[ "$FAILED_24H" -eq 0 ] && FAILED_24H=$(grep "Failed password\|Invalid user" /var/log/auth.log 2>/dev/null | grep "$(date +%b\ %d)\|$(date -d yesterday +%b\ %d)" 2>/dev/null | wc -l)
 FAILED_24H=${FAILED_24H:-0}
 if [ "$FAILED_24H" -gt 0 ]; then
     if [ "$FAILED_24H" -gt 50 ]; then
